@@ -78,6 +78,12 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
                 activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp4')# + MIN_DISP
             disp4_up = tf.image.resize_bilinear(disp4, [np.int(H/4), np.int(W/4)])
 
+            upcnv4_hm = slim.conv2d_transpose(icnv5, 28,  [3, 3], stride=2, scope='upcnv4_hm')
+            #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
+            icnv4_hm  = slim.conv2d(upcnv4_hm, 28,  [3, 3], stride=1, scope='icnv4_hm')
+            landmark4_hm  = slim.conv2d(icnv4_hm, 28, [3, 3], stride=1, 
+                activation_fn=None, normalizer_fn=None, scope='disp4_hm')# + MIN_DISP
+
             upcnv3 = slim.conv2d_transpose(icnv4, 64,  [3, 3], stride=2, scope='upcnv3')
             i3_in  = tf.concat([upcnv3, cnv2b, disp4_up], axis=3)
             icnv3  = slim.conv2d(i3_in, 64,  [3, 3], stride=1, scope='icnv3')
@@ -85,12 +91,24 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
                 activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp3')# + MIN_DISP
             disp3_up = tf.image.resize_bilinear(disp3, [np.int(H/2), np.int(W/2)])
 
+            upcnv3_hm = slim.conv2d_transpose(icnv4, 28,  [3, 3], stride=2, scope='upcnv3_hm')
+            #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
+            icnv3_hm  = slim.conv2d(upcnv3_hm, 28,  [3, 3], stride=1, scope='icnv3_hm')
+            landmark3_hm  = slim.conv2d(icnv3_hm, 28, [3, 3], stride=1, 
+                activation_fn=None, normalizer_fn=None, scope='disp3_hm')# + MIN_DISP
+
             upcnv2 = slim.conv2d_transpose(icnv3, 32,  [3, 3], stride=2, scope='upcnv2')
             i2_in  = tf.concat([upcnv2, cnv1b, disp3_up], axis=3)
             icnv2  = slim.conv2d(i2_in, 32,  [3, 3], stride=1, scope='icnv2')
             disp2  = DISP_SCALING * slim.conv2d(icnv2, 1,   [3, 3], stride=1, 
                 activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp2')# + MIN_DISP
             disp2_up = tf.image.resize_bilinear(disp2, [H, W])
+            
+            upcnv2_hm = slim.conv2d_transpose(icnv3, 28,  [3, 3], stride=2, scope='upcnv2_hm')
+            #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
+            icnv2_hm  = slim.conv2d(upcnv2_hm, 28,  [3, 3], stride=1, scope='icnv2_hm')
+            landmark2_hm  = slim.conv2d(icnv2_hm, 28, [3, 3], stride=1, 
+                activation_fn=None, normalizer_fn=None, scope='disp2_hm')# + MIN_DISP
 
             upcnv1 = slim.conv2d_transpose(icnv2, 16,  [3, 3], stride=2, scope='upcnv1')
             i1_in  = tf.concat([upcnv1, disp2_up], axis=3)
@@ -100,13 +118,13 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
 
 
             upcnv1_hm = slim.conv2d_transpose(icnv2, 28,  [3, 3], stride=2, scope='upcnv1_hm')
-            i1_in_hm  = tf.concat([upcnv1_hm, disp2_up], axis=3)
-            icnv1_hm  = slim.conv2d(i1_in_hm, 28,  [3, 3], stride=1, scope='icnv1_hm')
-            landmark_hm  = slim.conv2d(icnv1_hm, 28,   [3, 3], stride=1, 
+            #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
+            icnv1_hm  = slim.conv2d(upcnv1_hm, 28,  [3, 3], stride=1, scope='icnv1_hm')
+            landmark1_hm  = slim.conv2d(icnv1_hm, 28, [3, 3], stride=1, 
                 activation_fn=None, normalizer_fn=None, scope='disp1_hm')# + MIN_DISP
 
             
             end_points = utils.convert_collection_to_dict(end_points_collection)
-            return [disp1, disp2, disp3, disp4], landmark_hm, end_points
+            return [disp1, disp2, disp3, disp4], [landmark1_hm,landmark2_hm,landmark3_hm,landmark4_hm], end_points
 
 

@@ -12,7 +12,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_dir", "", "Dataset directory")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss/", "Directory name to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v3/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
@@ -33,8 +33,10 @@ flags.DEFINE_integer("change_gauss", 2000, "Change gauss scale after num steps")
 opt = flags.FLAGS
 
 # Basic Constants
-SIGMA = 2.0
-FILTER_SIZE = 15
+FILTER_SIZE = 25
+SIGMA = 0.3*((FILTER_SIZE-1)*0.5 - 1) + 0.8
+
+CUDA_VISIBLE_DEVICES=1
 
 def save(sess, checkpoint_dir, step, saver):
     model_name = 'model'
@@ -54,7 +56,7 @@ def gauss_smooth(mask):
 
 
 #Initialize data loader
-imageloader = DataLoader('D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords',
+imageloader = DataLoader('/home/z003xr2y/data/tfrecords/',  #'D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords'
                             5,
                             224, 
                             224,
@@ -108,7 +110,7 @@ with tf.name_scope("train_op"):
                         pred[0])
 
     gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)
-    pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)
+    pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark[0],3),axis=3)
 
 
     # sp1,sp2,sp3=tf.split(pred_landmark,3,2)
