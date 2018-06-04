@@ -81,7 +81,7 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
             upcnv4_hm = slim.conv2d_transpose(icnv5, 128,  [3, 3], stride=2, scope='upcnv4_hm')
             #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
             icnv4_hm  = slim.conv2d(upcnv4_hm, 64,  [3, 3], stride=1, scope='icnv4_hm')
-            landmark4_hm  = slim.conv2d(icnv4_hm, 4, [3, 3], stride=1, 
+            landmark4_hm  = slim.conv2d(icnv4_hm, 28, [3, 3], stride=1, 
                 activation_fn=None, normalizer_fn=None, scope='disp4_hm')# + MIN_DISP
 
             upcnv3 = slim.conv2d_transpose(icnv4, 64,  [3, 3], stride=2, scope='upcnv3')
@@ -94,7 +94,7 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
             upcnv3_hm = slim.conv2d_transpose(icnv4, 64,  [3, 3], stride=2, scope='upcnv3_hm')
             #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
             icnv3_hm  = slim.conv2d(upcnv3_hm, 32,  [3, 3], stride=1, scope='icnv3_hm')
-            landmark3_hm  = slim.conv2d(icnv3_hm, 4, [3, 3], stride=1, 
+            landmark3_hm  = slim.conv2d(icnv3_hm, 28, [3, 3], stride=1, 
                 activation_fn=None, normalizer_fn=None, scope='disp3_hm')# + MIN_DISP
 
             upcnv2 = slim.conv2d_transpose(icnv3, 32,  [3, 3], stride=2, scope='upcnv2')
@@ -106,8 +106,8 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
             
             upcnv2_hm = slim.conv2d_transpose(icnv3, 32,  [3, 3], stride=2, scope='upcnv2_hm')
             #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
-            icnv2_hm  = slim.conv2d(upcnv2_hm, 16,  [3, 3], stride=1, scope='icnv2_hm')
-            landmark2_hm  = slim.conv2d(icnv2_hm, 4, [3, 3], stride=1, 
+            icnv2_hm  = slim.conv2d(upcnv2_hm, 28,  [3, 3], stride=1, scope='icnv2_hm')
+            landmark2_hm  = slim.conv2d(icnv2_hm, 28, [3, 3], stride=1, 
                 activation_fn=None, normalizer_fn=None, scope='disp2_hm')# + MIN_DISP
 
             upcnv1 = slim.conv2d_transpose(icnv2, 16,  [3, 3], stride=2, scope='upcnv1')
@@ -117,10 +117,10 @@ def disp_net(tgt_image, is_training=True, is_reuse=False):
                 activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp1')# + MIN_DISP
 
 
-            upcnv1_hm = slim.conv2d_transpose(icnv2, 16,  [3, 3], stride=2, scope='upcnv1_hm')
+            upcnv1_hm = slim.conv2d_transpose(icnv2, 28,  [3, 3], stride=2, scope='upcnv1_hm')
             #i1_in_hm  = tf.concat([upcnv1_hm], axis=3)
-            icnv1_hm  = slim.conv2d(upcnv1_hm, 8,  [3, 3], stride=1, scope='icnv1_hm')
-            landmark1_hm  = slim.conv2d(icnv1_hm, 4, [3, 3], stride=1, 
+            icnv1_hm  = slim.conv2d(upcnv1_hm, 28,  [3, 3], stride=1, scope='icnv1_hm')
+            landmark1_hm  = slim.conv2d(icnv1_hm, 28, [3, 3], stride=1, 
                 activation_fn=None, normalizer_fn=None, scope='disp1_hm')# + MIN_DISP
 
             
