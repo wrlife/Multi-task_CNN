@@ -39,7 +39,7 @@ def compute_loss(pred,pred_landmark,data_dict,FLAGS):
         
         curr_landmark = tf.image.resize_area(landmark, 
             [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
-        landmark_loss+=l2loss(curr_landmark,pred_landmark[s])/(2**s)
+        landmark_loss+=l2loss(curr_landmark[:,:,:,10:14],pred_landmark[s])/(2**s)
         
         #landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
 

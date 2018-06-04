@@ -12,7 +12,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_dir", "", "Dataset directory")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v3/", "Directory name to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v4/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
@@ -109,7 +109,7 @@ with tf.name_scope("train_op"):
     tf.summary.image('pred_label' , \
                         pred[0])
 
-    gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)
+    gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'][:,:,:,10:14],3),axis=3)
     pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark[0],3),axis=3)
 
 
