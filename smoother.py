@@ -71,11 +71,33 @@ class Smoother(object):
         out_filter = np.repeat(out_filter, channels, axis = 2)
         return out_filter
 
+
+
+    def gauss_kernel_tf(self, kernlen, nsig, channels):
+        def tf_diff(a):
+            return a[1:]-a[:-1]
+        
+        interval = (2*nsig+1.)/(kernlen)
+        x = tf.lin_space(-nsig-interval/2.0, nsig+interval/2.0, tf.cast(kernlen+1,tf.int32))
+        dist = tf.distributions.Normal(loc=0., scale=nsig)
+
+        kern1d = tf.expand_dims(tf_diff(dist.cdf(x)),1)
+        #import pdb;pdb.set_trace()
+        kernel_raw = tf.sqrt(tf.matmul(kern1d, kern1d, transpose_a = True))
+    
+        kernel = kernel_raw/tf.reduce_sum(kernel_raw)
+
+        out_filter = tf.expand_dims(tf.expand_dims(kernel,2),3)
+        out_filter = tf.tile(out_filter,[1,1,channels,1])
+
+        # out_filter = np.repeat(out_filter, channels, axis = 2)
+        return out_filter
+
     def make_gauss_var(self, name, size, sigma, c_i):
-        with tf.device("/cpu:0"):
-            kernel = self.gauss_kernel(size, sigma, c_i)
-            var = tf.Variable(tf.convert_to_tensor(kernel), name = name, trainable=False)
-        return var
+        #with tf.device("/cpu:0"):
+        kernel = self.gauss_kernel_tf(size, sigma, c_i)
+            #var = tf.Variable(tf.convert_to_tensor(kernel), name = name, trainable=False)
+        return kernel
 
     def get_output(self):
         '''Returns the smoother output.'''
@@ -89,6 +111,7 @@ class Smoother(object):
         # Get the number of channels in the input
         c_i = input.get_shape().as_list()[3]
         # Convolution for a given input and kernel
+        #import pdb;pdb.set_trace()
         convolve = lambda i, k: tf.nn.depthwise_conv2d(i, k, [1, 1, 1, 1],
                                                              padding=padding)
         with tf.variable_scope(name) as scope:
