@@ -52,7 +52,8 @@ class DataLoader(object):
                     'IR': tf.FixedLenFeature([], tf.string),
                     'depth': tf.FixedLenFeature([], tf.string),
                     'mask': tf.FixedLenFeature([], tf.string),
-                    'matDetector2IR': tf.FixedLenFeature([], tf.string),
+				    'quaternion': tf.FixedLenFeature([], tf.string),
+				    'translation': tf.FixedLenFeature([], tf.string),
                     'landmark_heatmap': tf.FixedLenFeature([], tf.string),
                     'visibility': tf.FixedLenFeature([], tf.string),
                     'matK': tf.FixedLenFeature([], tf.string),
@@ -65,17 +66,21 @@ class DataLoader(object):
             IR = tf.decode_raw(features['IR'], tf.float64)/255.0
             depth = tf.decode_raw(features['depth'], tf.float64)/100.0
             label = tf.decode_raw(features['mask'], tf.uint8)
-            matDetector2IR = tf.decode_raw(features['matDetector2IR'], tf.float64)
+            quaternion = tf.decode_raw(features['quaternion'], tf.float64)
+            translation = tf.decode_raw(features['translation'], tf.float64)
             points2D = tf.decode_raw(features['landmark_heatmap'], tf.float32)
             visibility = tf.decode_raw(features['visibility'], tf.float64)
             matK = tf.decode_raw(features['matK'], tf.float64)
 
-            image =  tf.cast(tf.reshape(image,[224, 224, 3]),tf.float32)
-            IR = tf.cast(tf.reshape(IR,[224, 224, 3]),tf.float32)
-            depth = tf.cast(tf.reshape(depth,[224, 224, 1]),tf.float32)
-            label = tf.reshape(label,[224, 224, 1])
-            matDetector2IR = tf.cast(tf.reshape(matDetector2IR,[4,4]),tf.float32)
-            points2D = tf.reshape(points2D,[224,224,28])*500.0
+            image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)
+            IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
+            depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
+            label = tf.reshape(label,[self.image_height, self.image_width, 1])
+            quaternion = tf.cast(tf.reshape(quaternion,[4]),tf.float32)
+            translation = tf.cast(tf.reshape(translation,[3]),tf.float32)
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*500.0
+
+            points2D = tf.reverse(points2D,[2])
 
             # points2D = tf.transpose(points2D,perm=[1,0])
             # sp1_gt, sp2_gt = tf.split(points2D, 2, 1)
@@ -92,16 +97,13 @@ class DataLoader(object):
 
 
             #Data augmentationmamatK
-
-
-
-
             data_dict = {}
             data_dict['image'] = image
             data_dict['IR'] = IR
             data_dict['depth'] = depth
             data_dict['label'] = label
-            data_dict['matDetector2IR'] = matDetector2IR
+            data_dict['quaternion'] = quaternion
+            data_dict['translation'] = translation
             data_dict['points2D'] = points2D
             data_dict['visibility'] = visibility
             data_dict['matK'] = matK
@@ -160,9 +162,9 @@ class DataLoader(object):
         image,depth,label = self.read_images_from_disk(input_queue)
 
         # Optional Image and Label Batching
-        image.set_shape((224, 224, 3))
-        depth.set_shape([224, 224, 1])
-        label.set_shape([224, 224, 1])
+        image.set_shape((self.image_height, self.image_width, 3))
+        depth.set_shape([self.image_height, self.image_width, 1])
+        label.set_shape([self.image_height, self.image_width, 1])
         image_batch, depth_batch, label_batch = tf.train.batch([image,depth,label],
                                     num_threads = 8, batch_size=self.batch_size)
 
