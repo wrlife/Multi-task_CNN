@@ -21,12 +21,12 @@ def compute_loss(pred,pred_landmark,data_dict,FLAGS):
     landmark_loss = 0
     vis_loss = 0
 
-    depth_weight = 1000
-    landmark_weight = 100
+    depth_weight = 10000
+    landmark_weight = 1
     vis_weight=10
 
     label_batch = data_dict['label']
-    landmark = data_dict['points2D']
+    landmark = data_dict['points2D'][:,:,:,10:14]
     visibility = data_dict['visibility']
 
 
@@ -39,7 +39,7 @@ def compute_loss(pred,pred_landmark,data_dict,FLAGS):
         
         curr_landmark = tf.image.resize_area(landmark, 
             [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
-        landmark_loss+=l2loss(curr_landmark[:,:,:,10:14],pred_landmark[s])/(2**s)
+        landmark_loss+=l2loss(curr_landmark,pred_landmark[s])/(2**s)
         
         #landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
 

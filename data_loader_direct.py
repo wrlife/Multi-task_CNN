@@ -78,9 +78,9 @@ class DataLoader(object):
             label = tf.reshape(label,[self.image_height, self.image_width, 1])
             quaternion = tf.cast(tf.reshape(quaternion,[4]),tf.float32)
             translation = tf.cast(tf.reshape(translation,[3]),tf.float32)
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*500.0
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
 
-            points2D = tf.reverse(points2D,[2])
+            #points2D = tf.reverse(points2D,[2])
 
             # points2D = tf.transpose(points2D,perm=[1,0])
             # sp1_gt, sp2_gt = tf.split(points2D, 2, 1)

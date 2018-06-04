@@ -64,6 +64,7 @@ class Smoother(object):
         interval = (2*nsig+1.)/(kernlen)
         x = np.linspace(-nsig-interval/2., nsig+interval/2., kernlen+1)
         kern1d = np.diff(st.norm.cdf(x))
+        import pdb;pdb.set_trace()
         kernel_raw = np.sqrt(np.outer(kern1d, kern1d))
         kernel = kernel_raw/kernel_raw.sum()
         out_filter = np.array(kernel, dtype = np.float32)
@@ -78,25 +79,20 @@ class Smoother(object):
             return a[1:]-a[:-1]
         
         interval = (2*nsig+1.)/(kernlen)
-        x = tf.lin_space(-nsig-interval/2.0, nsig+interval/2.0, tf.cast(kernlen+1,tf.int32))
+        x = tf.lin_space(-(kernlen-1)/2.0, (kernlen-1)/2.0, tf.cast(kernlen,tf.int32))
         dist = tf.distributions.Normal(loc=0., scale=nsig)
-
-        kern1d = tf.expand_dims(tf_diff(dist.cdf(x)),1)
-        #import pdb;pdb.set_trace()
-        kernel_raw = tf.sqrt(tf.matmul(kern1d, kern1d, transpose_a = True))
-    
+        kern1d = tf.expand_dims(dist.prob(x),1)
+        kernel_raw = tf.sqrt(tf.matmul(kern1d, kern1d,transpose_a=False, transpose_b = True))
         kernel = kernel_raw/tf.reduce_sum(kernel_raw)
-
-        out_filter = tf.expand_dims(tf.expand_dims(kernel,2),3)
+        out_filter = tf.expand_dims(tf.expand_dims(kernel_raw,2),3)
         out_filter = tf.tile(out_filter,[1,1,channels,1])
-
-        # out_filter = np.repeat(out_filter, channels, axis = 2)
         return out_filter
 
     def make_gauss_var(self, name, size, sigma, c_i):
         #with tf.device("/cpu:0"):
+          #kernel = self.gauss_kernel(159,55,c_i)
         kernel = self.gauss_kernel_tf(size, sigma, c_i)
-            #var = tf.Variable(tf.convert_to_tensor(kernel), name = name, trainable=False)
+          #var = tf.Variable(kernel, name = name, trainable=False)
         return kernel
 
     def get_output(self):

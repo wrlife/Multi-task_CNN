@@ -33,10 +33,10 @@ flags.DEFINE_integer("change_gauss", 2000, "Change gauss scale after num steps")
 opt = flags.FLAGS
 
 # Basic Constants
-FILTER_SIZE = 25
-SIGMA = 0.3*((FILTER_SIZE-1)*0.5 - 1) + 0.8
+#FILTER_SIZE = 9
 
-CUDA_VISIBLE_DEVICES=1
+
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 def save(sess, checkpoint_dir, step, saver):
     model_name = 'model'
@@ -49,17 +49,20 @@ def save(sess, checkpoint_dir, step, saver):
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
 
-def gauss_smooth(mask):
+def gauss_smooth(mask,FILTER_SIZE):
+    SIGMA = 0.3*((FILTER_SIZE-1)*0.5 - 1) + 0.8#0.3*(FILTER_SIZE-1) + 0.8
     smoother = Smoother({'data':mask}, FILTER_SIZE, SIGMA)
-    return smoother.get_output()
+    new_mask = smoother.get_output()
+
+    return new_mask
 
 
 
 #Initialize data loader
 imageloader = DataLoader('/home/z003xr2y/data/tfrecords/',  #'D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords'
                             5,
-                            224, 
-                            224,
+                            opt.img_height, 
+                            opt.img_width,
                             'train')
 
 # Load training data
@@ -73,9 +76,12 @@ pred, pred_landmark, _ = disp_net(tf.cast(input_ts,tf.float32))
 
 
 #Use larger Gaussian mask in the first few thousand iterations of training
-use_large_gauss = tf.placeholder(tf.float32,name="condition")
-smoothed = gauss_smooth(data_dict['points2D'])
-data_dict['points2D'] = tf.cond(use_large_gauss>0,lambda:smoothed, lambda:data_dict['points2D'])
+#use_large_gauss = tf.placeholder(tf.float32,name="condition")
+kernel_size = tf.placeholder(tf.float32,name="k_size")
+new_mask = gauss_smooth(data_dict['points2D'],kernel_size)
+
+data_dict['points2D'] = new_mask
+#data_dict['points2D'] = tf.cond(use_large_gauss>0,lambda:smoothed, lambda:data_dict['points2D'])
 
 
 #Compute loss
@@ -173,6 +179,7 @@ with sv.managed_session(config=config) as sess:
 
     try:
         step=0
+        m_f_size = 51.0
         while True:
             start_time = time.time()
 
@@ -191,18 +198,22 @@ with sv.managed_session(config=config) as sess:
             #===============
             #Run fetch
             #===============
-            use_gauss = 1.0
-            if(step>opt.change_gauss):
-                use_gauss=0
+            #use_gauss = 1.0
+            #if(step>opt.change_gauss):
+            #    use_gauss=0
+            if m_f_size>9:
+              m_f_size = m_f_size-m_f_size/3000.0
+            else:
+              m_f_size=9.0
                 
-            results = sess.run(fetches,feed_dict={use_large_gauss:use_gauss})
+            results = sess.run(fetches,feed_dict={kernel_size:m_f_size})
             # Save and print log
             duration = time.time() - start_time
             gs = results["global_step"]
             if step % opt.summary_freq == 0:
                 sv.summary_writer.add_summary(results["summary"], gs)
-                print('Step %d: loss = %.2f (%.3f sec)' % (step, results["loss"],
-                                                        duration))
+                print('Step %d: loss = %.2f (%.3f sec), Filter_size: %f' % (step, results["loss"],
+                                                        duration, m_f_size))
             if step % opt.save_latest_freq == 0:
                 save(sess, opt.checkpoint_dir, gs,saver)
             # if step % steps_per_epoch == 0:
