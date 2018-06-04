@@ -26,7 +26,7 @@ def compute_loss(pred,pred_landmark,data_dict,FLAGS):
     vis_weight=10
 
     label_batch = data_dict['label']
-    landmark = data_dict['points2D'][:,:,:,10:14]
+    landmark = data_dict['points2D']
     visibility = data_dict['visibility']
 
 
