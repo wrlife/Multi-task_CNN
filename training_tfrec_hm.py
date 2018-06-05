@@ -11,8 +11,8 @@ from smoother import Smoother
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
-flags.DEFINE_string("dataset_dir", "", "Dataset directory")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v5/", "Directory name to save the checkpoints")
+flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/tfrecords/", "Dataset directory")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v7/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
@@ -59,7 +59,7 @@ def gauss_smooth(mask,FILTER_SIZE):
 
 
 #Initialize data loader
-imageloader = DataLoader('/home/z003xr2y/data/tfrecords/',  #'D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords'
+imageloader = DataLoader(opt.dataset_dir,  #'D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords'
                             5,
                             opt.img_height, 
                             opt.img_width,
@@ -71,7 +71,7 @@ data_dict = imageloader.inputs(opt.batch_size,opt.max_steps)  # batch_size, num_
 
 #Construct model
 #Concatenate color and depth for model input
-input_ts = tf.concat([data_dict['IR'],data_dict['image'],data_dict['depth']],axis=3)
+input_ts = tf.concat([data_dict['image'],data_dict['depth']],axis=3) #[data_dict['IR'],
 pred, pred_landmark, _ = disp_net(tf.cast(input_ts,tf.float32))
 
 
@@ -179,7 +179,7 @@ with sv.managed_session(config=config) as sess:
 
     try:
         step=0
-        m_f_size = 159.0
+        m_f_size = opt.img_height/2.0#159.0
         while True:
             start_time = time.time()
 
@@ -201,7 +201,7 @@ with sv.managed_session(config=config) as sess:
             #use_gauss = 1.0
             #if(step>opt.change_gauss):
             #    use_gauss=0
-            if m_f_size>9:
+            if m_f_size>9.0:
               m_f_size = m_f_size-m_f_size/8000.0
             else:
               m_f_size=9.0
