@@ -7,7 +7,7 @@ def l2loss(label,pred,v_weight=None):
     diff = label-pred
     if v_weight is not None:
         diff = tf.multiply(diff,v_weight)
-    loss = tf.reduce_mean(diff**2)
+    loss = tf.reduce_mean(diff**2)/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
     return loss
 
 
@@ -31,20 +31,21 @@ def compute_loss(pred,pred_landmark,data_dict,FLAGS):
 
 
     #Segmentation loss
-    for s in range(FLAGS.num_scales):
-        curr_label = tf.image.resize_area(label_batch, 
-            [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
-        depth_loss+=l2loss(curr_label,pred[s])/(2**s)
+    #for s in range(FLAGS.num_scales):
+        #curr_label = tf.image.resize_area(label_batch, 
+        #    [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
+        #depth_loss+=l2loss(curr_label,pred[s])/(2**s)
         
         
-        curr_landmark = tf.image.resize_area(landmark, 
-            [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
-        landmark_loss+=l2loss(curr_landmark,pred_landmark[s])/(2**s)
+        #curr_landmark = tf.image.resize_area(landmark, 
+        #    [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
+        #landmark_loss+=l2loss(curr_landmark,pred_landmark[s])/(2**s)
         
         #landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
-
+    landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
+    #landmark_loss = tf.nn.l2_loss(pred_landmark-landmark)#l2loss(landmark,pred_landmark)*landmark_weight
     depth_loss = depth_weight*depth_loss
-    landmark_loss = landmark_loss*landmark_weight
+    #landmark_loss = landmark_loss*landmark_weight
 
     #Landmark loss
     #v_weight = tf.concat([tf.expand_dims(visibility,2),tf.expand_dims(visibility,2)],axis=2)

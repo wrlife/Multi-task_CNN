@@ -12,7 +12,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/tfrecords/", "Dataset directory")
-flags.DEFINE_string("checkpoint_dir", "./checkpoints_l2_IR_color_depth_landmark_hm_varGauss_v7/", "Directory name to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_varGauss_multiDecoder/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
@@ -22,7 +22,7 @@ flags.DEFINE_integer("batch_size", 2, "The size of of a sample batch")
 flags.DEFINE_integer("img_height", 224, "Image height")
 flags.DEFINE_integer("img_width", 224, "Image width")
 flags.DEFINE_integer("seq_length", 3, "Sequence length for each example")
-flags.DEFINE_integer("max_steps", 60, "Maximum number of training iterations")
+flags.DEFINE_integer("max_steps", 80, "Maximum number of training iterations")
 flags.DEFINE_integer("summary_freq", 1, "Logging every log_freq iterations")
 flags.DEFINE_integer("save_latest_freq", 1000, \
     "Save the latest model every save_latest_freq iterations (overwrites the previous latest model)")
@@ -71,8 +71,8 @@ data_dict = imageloader.inputs(opt.batch_size,opt.max_steps)  # batch_size, num_
 
 #Construct model
 #Concatenate color and depth for model input
-input_ts = tf.concat([data_dict['image'],data_dict['depth']],axis=3) #[data_dict['IR'],
-pred, pred_landmark, _ = disp_net(tf.cast(input_ts,tf.float32))
+input_ts = tf.concat([data_dict['IR'],data_dict['depth'],data_dict['image']],axis=3) #data_dict['depth'],
+pred, pred_landmark, _ = disp_net_multi_decoder(tf.cast(input_ts,tf.float32))
 
 
 #Use larger Gaussian mask in the first few thousand iterations of training
@@ -115,8 +115,10 @@ with tf.name_scope("train_op"):
     tf.summary.image('pred_label' , \
                         pred[0])
 
-    gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)
-    pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark[0],3),axis=3)
+    
+    random_landmark = tf.placeholder(tf.int32)
+    gt_landmark = tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#tf.reduce_sum(data_dict['points2D'],3),axis=3)
+    pred_landmark = tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#tf.reduce_sum(pred_landmark[0],3),axis=3)
 
 
     # sp1,sp2,sp3=tf.split(pred_landmark,3,2)
@@ -201,12 +203,14 @@ with sv.managed_session(config=config) as sess:
             #use_gauss = 1.0
             #if(step>opt.change_gauss):
             #    use_gauss=0
-            if m_f_size>9.0:
-              m_f_size = m_f_size-m_f_size/8000.0
-            else:
-              m_f_size=9.0
+            #if m_f_size>9.0:
+            #  m_f_size = m_f_size-m_f_size/8000.0
+            #else:
+            #  m_f_size=9.0
+            m_f_size = 9.0
                 
-            results = sess.run(fetches,feed_dict={kernel_size:m_f_size})
+                
+            results = sess.run(fetches,feed_dict={kernel_size:m_f_size,random_landmark:np.random.randint(5)})
             # Save and print log
             duration = time.time() - start_time
             gs = results["global_step"]
