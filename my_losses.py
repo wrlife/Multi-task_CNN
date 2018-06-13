@@ -36,13 +36,16 @@ def pixel2cam(depth, pixel_coords, intrinsics, is_homogeneous=True):
 
 def compute_loss(output,data_dict,FLAGS):
 
-    pred = output[0]
-    pred_landmark = output[1]
+
     if FLAGS.model=="pose":
         pose = output[2]
-    elif FLAGS.model=="hourglass":
+
+    if FLAGS.model=="hourglass":
         pre_landmark_init = output[0][1]
-        pre_landmark = output[1][1]
+        pred_landmark = output[1][1]
+    else:
+        pred = output[0]
+        pred_landmark = output[1]
 
     #=======
     #Depth loss
@@ -67,7 +70,7 @@ def compute_loss(output,data_dict,FLAGS):
     quaternion = data_dict['quaternion']
     translation = data_dict['translation']
 
-
+    
     if FLAGS.with_seg:
         #Segmentation loss
         for s in range(FLAGS.num_scales):
@@ -91,7 +94,7 @@ def compute_loss(output,data_dict,FLAGS):
         landmark_loss = l2loss(data_dict["landmark_init"],pre_landmark_init)*landmark_weight
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight + landmark_loss
     
-    elif:    
+    else:
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
     
 

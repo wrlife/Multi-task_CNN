@@ -18,7 +18,7 @@ flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_landmark_single_domain_t
 flags.DEFINE_string("checkpoint_dir_src", "./checkpoints_IR_landmark_single/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
 flags.DEFINE_float("learning_rate1", 0.0002, "Learning rate of for adam")
-flags.DEFINE_float("learning_rate2", 0.00002, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate2", 0.000002, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_float("smooth_weight", 0.5, "Weight for smoothness")
 flags.DEFINE_float("explain_reg_weight", 0.0, "Weight for explanability regularization")
