@@ -25,7 +25,7 @@ class DataLoader(object):
     # Load training data from tf records
     #==================================
 
-    def inputs(self,batch_size, num_epochs):
+    def inputs(self,batch_size, num_epochs,with_aug=False):
         """Reads input data num_epochs times.
         Args:
             train: Selects between the training (True) and validation (False) data.
@@ -62,7 +62,7 @@ class DataLoader(object):
             # Convert from a scalar string tensor (whose single string has
             # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
             # [mnist.IMAGE_PIXELS].
-            image = tf.decode_raw(features['color'], tf.float64)/255.0
+            image = tf.decode_raw(features['color'], tf.float64)
             IR = tf.decode_raw(features['IR'], tf.float64)/255.0
             depth = tf.decode_raw(features['depth'], tf.float64)/100.0
             label = tf.decode_raw(features['mask'], tf.uint8)
@@ -73,12 +73,20 @@ class DataLoader(object):
             matK = tf.decode_raw(features['matK'], tf.float64)
 
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)
+            image = tf.image.rgb_to_grayscale(image)/255.0
+
             IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
             depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
             label = tf.reshape(label,[self.image_height, self.image_width, 1])
             quaternion = tf.cast(tf.reshape(quaternion,[4]),tf.float32)
+
             translation = tf.cast(tf.reshape(translation,[3]),tf.float32)
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*500000.0
+            #import pdb;pdb.set_trace()
+            norm = tf.sqrt(tf.reduce_sum(tf.square(translation),0, keep_dims=True))
+            translation = translation / norm
+            translation = tf.concat([translation,norm],axis=0)
+            
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
 
             #points2D = tf.reverse(points2D,[2])
 
@@ -110,6 +118,17 @@ class DataLoader(object):
 
             return data_dict
 
+        def augment(data_dict):
+        
+            ir_batch, image_batch, depth_batch, label_batch,landmark_batch = self.data_augmentation(data_dict['IR'], data_dict['image'], data_dict['depth'],data_dict['label'], data_dict['points2D'],224,224)
+            data_dict['image'] = image_batch
+            data_dict['depth'] = depth_batch
+            data_dict['label'] = label_batch
+            data_dict['points2D'] = landmark_batch
+            data_dict['IR'] = ir_batch
+            
+            return data_dict
+            
 
         if not num_epochs:
             num_epochs = None
@@ -131,12 +150,97 @@ class DataLoader(object):
             # completely uniform shuffling, set the parameter to be the same as the
             # number of elements in the dataset.
             dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
-
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
+            if with_aug:
+                dataset = dataset.map(augment)
 
             iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()
+
+
+    #==================================
+    # Load training data from tf records
+    #==================================
+
+    def inputs_test(self,batch_size, num_epochs,with_aug=False):
+        """Reads input data num_epochs times.
+        Args:
+            train: Selects between the training (True) and validation (False) data.
+            batch_size: Number of examples per returned batch.
+            num_epochs: Number of times to read the input data, or 0/None to
+            train forever.
+        Returns:
+            A tuple (images, labels), where:
+            * images is a float tensor with shape [batch_size, mnist.IMAGE_PIXELS]
+            in the range [-0.5, 0.5].
+            * labels is an int32 tensor with shape [batch_size] with the true label,
+            a number in the range [0, mnist.NUM_CLASSES).
+            This function creates a one_shot_iterator, meaning that it will only iterate
+            over the dataset once. On the other hand there is no special initialization
+            required.
+        """
+        def decode(serialized_example):
+            """Parses an image and label from the given `serialized_example`."""
+            features = tf.parse_single_example(
+                serialized_example,
+                # Defaults are not specified since both keys are required.
+                features={
+                    'color': tf.FixedLenFeature([], tf.string),
+                    'IR': tf.FixedLenFeature([], tf.string),
+                    'depth': tf.FixedLenFeature([], tf.string),
+                    'matK': tf.FixedLenFeature([], tf.string),
+                })
+
+            # Convert from a scalar string tensor (whose single string has
+            # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
+            # [mnist.IMAGE_PIXELS].
+            image = tf.decode_raw(features['color'], tf.float64)/255.0
+            IR = tf.decode_raw(features['IR'], tf.float64)/255.0
+            depth = tf.decode_raw(features['depth'], tf.float64)/100.0
+            matK = tf.decode_raw(features['matK'], tf.float64)
+
+            image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)
+            IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
+            depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
+            matK = tf.cast(tf.reshape(matK,[3,3]),tf.float32)
+
+            #Data augmentationmamatK
+            data_dict = {}
+            data_dict['image'] = image
+            data_dict['IR'] = IR
+            data_dict['depth'] = depth
+            data_dict['matK'] = matK
+
+            return data_dict
+
+
+        if not num_epochs:
+            num_epochs = None
+        filenames = glob.glob(os.path.join(self.dataset_dir,'*.tfrecords'))
+
+        with tf.name_scope('input_test'):
+            # TFRecordDataset opens a binary file and reads one record at a time.
+            # `filename` could also be a list of filenames, which will be read in order.
+            dataset = tf.data.TFRecordDataset(filenames)
+
+            # The map transformation takes a function and applies it to every element
+            # of the dataset.
+            dataset = dataset.map(decode)
+            # dataset = dataset.map(augment)
+            # dataset = dataset.map(normalize)
+
+            # The shuffle transformation uses a finite-sized buffer to shuffle elements
+            # in memory. The parameter is the number of elements in the buffer. For
+            # completely uniform shuffling, set the parameter to be the same as the
+            # number of elements in the dataset.
+            dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
+            dataset = dataset.repeat(num_epochs)
+            dataset = dataset.batch(batch_size)
+            iterator = dataset.make_one_shot_iterator()
+
+        return iterator.get_next()
+
 
     #================================
     # Load rgb, depth, and mask through txt
@@ -267,10 +371,10 @@ class DataLoader(object):
         return image, depth, label
 
 
-    def data_augmentation(self, image, depth, label, out_h, out_w):
+    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w):
            
         # Random scaling
-        def random_scaling(image, depth, label):
+        def random_scaling(ir, image, depth, label,landmark):
             batch_size, in_h, in_w, _ = image.get_shape().as_list()
             scaling = tf.random_uniform([2], 1, 1.15)
             x_scaling = scaling[0]
@@ -281,10 +385,12 @@ class DataLoader(object):
             image = tf.image.resize_area(image, [out_h, out_w])
             depth = tf.image.resize_area(depth, [out_h, out_w])
             label = tf.image.resize_area(label, [out_h, out_w])
-            return image, depth, label
+            ir = tf.image.resize_area(ir, [out_h, out_w])
+            landmark = tf.image.resize_area(landmark, [out_h, out_w])
+            return ir, image, depth, label,landmark
 
         # Random cropping
-        def random_cropping(image, depth, label, out_h, out_w):
+        def random_cropping(ir, image, depth, label,landmark, out_h, out_w):
             # batch_size, in_h, in_w, _ = im.get_shape().as_list()
             batch_size, in_h, in_w, _ = tf.unstack(tf.shape(image))
             offset_y = tf.random_uniform([1], 0, in_h - out_h + 1, dtype=tf.int32)[0]
@@ -296,11 +402,15 @@ class DataLoader(object):
                 depth, offset_y, offset_x, out_h, out_w)
             label = tf.image.crop_to_bounding_box(
                 label, offset_y, offset_x, out_h, out_w)
-
-            return image, depth, label
+            landmark = tf.image.crop_to_bounding_box(
+                landmark, offset_y, offset_x, out_h, out_w)
+            ir = tf.image.crop_to_bounding_box(
+                ir, offset_y, offset_x, out_h, out_w)
+                
+            return ir, image, depth, label, landmark
 
         # Random flip
-        def random_flip(image, depth, label):
+        def random_flip(ir, image, depth, label,landmark):
             # batch_size, in_h, in_w, _ = im.get_shape().as_list()
 
             flips = np.random.randint(2, size=2)
@@ -309,12 +419,16 @@ class DataLoader(object):
                 image = tf.image.flip_left_right(image)
                 depth = tf.image.flip_left_right(depth)
                 label = tf.image.flip_left_right(label)
+                landmark = tf.image.flip_left_right(landmark)
+                ir = tf.image.flip_left_right(ir)
             if flips[1]==1:
                 image = tf.image.flip_up_down(image)
                 depth = tf.image.flip_up_down(depth)
                 label = tf.image.flip_up_down(label)
+                landmark = tf.image.flip_up_down(landmark)
+                ir = tf.image.flip_up_down(ir)
 
-            return image, depth, label
+            return ir,image, depth, label,landmark
 
         def random_color(image):
 
@@ -342,12 +456,12 @@ class DataLoader(object):
 
             return image     
 
-        image, depth, label = random_scaling(image, depth, label)
-        image, depth, label = random_cropping(image, depth, label, out_h, out_w)
-        image, depth, label = random_flip(image, depth, label)
-        image = random_color(image)
+        ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
+        ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
+        ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
+        #image = random_color(image)
 
-        return image, depth, label
+        return ir, image, depth, label,landmark
 
         
 
