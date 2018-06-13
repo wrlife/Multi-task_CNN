@@ -11,7 +11,7 @@ from smoother import Smoother
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
-flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/tfrecords/", "Dataset directory")
+flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/tfrecords_hr/", "Dataset directory")
 flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
@@ -20,8 +20,8 @@ flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_float("smooth_weight", 0.5, "Weight for smoothness")
 flags.DEFINE_float("explain_reg_weight", 0.0, "Weight for explanability regularization")
 flags.DEFINE_integer("batch_size", 2, "The size of of a sample batch")
-flags.DEFINE_integer("img_height", 224, "Image height")
-flags.DEFINE_integer("img_width", 224, "Image width")
+flags.DEFINE_integer("img_height", 480, "Image height")
+flags.DEFINE_integer("img_width", 640, "Image width")
 flags.DEFINE_integer("seq_length", 3, "Sequence length for each example")
 flags.DEFINE_integer("max_steps", 120, "Maximum number of training iterations")
 flags.DEFINE_integer("summary_freq", 100, "Logging every log_freq iterations")
@@ -100,6 +100,9 @@ imageloader = DataLoader(opt.dataset_dir,  #'D:\\Exp_data\\data\\2017_0216_Detec
 # Load training data
 data_dict = imageloader.inputs(opt.batch_size,opt.max_steps,opt.data_aug)  # batch_size, num_epochs
 
+
+
+
 #==========================
 #Construct input
 #==========================
@@ -134,19 +137,21 @@ elif opt.model=="hourglass":
     initial_output = disp_net_initial(tf.cast(input_ts,tf.float32))
     input_ts = tf.concat([input_ts,initial_output[1]],axis=3)
     refine_output = disp_net_refine(tf.cast(input_ts,tf.float32))
-    #import pdb;pdb.set_trace()
     output = [initial_output,refine_output]
-    data_dict["landmark_init"] = tf.concat([data_dict["points2D"][:,:,:,0],
-                                            data_dict["points2D"][:,:,:,4],
-                                            data_dict["points2D"][:,:,:,10],
-                                            data_dict["points2D"][:,:,:,14]],axis=3)
+    data_dict["landmark_init"] = tf.concat([tf.expand_dims(data_dict["points2D"][:,:,:,0],axis=3),
+                                            tf.expand_dims(data_dict["points2D"][:,:,:,4],axis=3),
+                                            tf.expand_dims(data_dict["points2D"][:,:,:,10],axis=3),
+                                            tf.expand_dims(data_dict["points2D"][:,:,:,14],axis=3)],axis=3)
+
 
 #=======================
 #Construct output
 #=======================
-pred = output[0]
+#pred = output[0]
 if opt.model == "multiscale":
     pred_landmark = output[1][0]
+elif opt.model=="hourglass":
+    pred_landmark = output[1][1]
 else:
     pred_landmark = output[1]
 
@@ -213,8 +218,8 @@ with tf.name_scope("train_op"):
     if opt.with_seg:
         tf.summary.image('gt_label' , \
                             data_dict['label'])
-        tf.summary.image('pred_label' , \
-                            pred[0])
+        # tf.summary.image('pred_label' , \
+        #                     pred[0])
                         
     random_landmark = tf.placeholder(tf.int32)
     gt_landmark = tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#tf.reduce_sum(data_dict['points2D'],3),axis=3)
