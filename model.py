@@ -827,3 +827,41 @@ def discriminator_bn(tgt_image, is_training=True, is_reuse=False):
             fc3 = tf.layers.dense(inputs=fc2, units=1, activation=None)
 
             return tf.nn.sigmoid(fc3)
+
+
+
+def disp_net_pose(tgt_image, is_training=True, is_reuse=False):
+    batch_norm_params = {'is_training': is_training,'decay':0.99}
+    H = tgt_image.get_shape()[1].value
+    W = tgt_image.get_shape()[2].value
+    with tf.variable_scope('pose_net',reuse = is_reuse) as sc:
+        end_points_collection = sc.original_name_scope + '_end_points'
+        with slim.arg_scope([slim.conv2d, slim.conv2d_transpose],
+                            normalizer_fn=slim.batch_norm,
+                            normalizer_params=batch_norm_params,
+                            weights_regularizer=slim.l2_regularizer(0.05),
+                            activation_fn=tf.nn.relu,
+                            outputs_collections=end_points_collection):
+            cnv1  = slim.conv2d(tgt_image, 32,  [7, 7], stride=2, scope='cnv1')
+            cnv1b = slim.conv2d(cnv1,  32,  [7, 7], stride=1, scope='cnv1b')
+            cnv2  = slim.conv2d(cnv1b, 64,  [5, 5], stride=2, scope='cnv2')
+            cnv2b = slim.conv2d(cnv2,  64,  [5, 5], stride=1, scope='cnv2b')
+            cnv3  = slim.conv2d(cnv2b, 128, [3, 3], stride=2, scope='cnv3')
+            cnv3b = slim.conv2d(cnv3,  128, [3, 3], stride=1, scope='cnv3b')
+            cnv4  = slim.conv2d(cnv3b, 256, [3, 3], stride=2, scope='cnv4')
+            cnv4b = slim.conv2d(cnv4,  256, [3, 3], stride=1, scope='cnv4b')
+            cnv5  = slim.conv2d(cnv4b, 512, [3, 3], stride=2, scope='cnv5')
+            cnv5b = slim.conv2d(cnv5,  512, [3, 3], stride=1, scope='cnv5b')
+            cnv6  = slim.conv2d(cnv5b, 512, [3, 3], stride=2, scope='cnv6')
+            cnv6b = slim.conv2d(cnv6,  512, [3, 3], stride=1, scope='cnv6b')
+            cnv7  = slim.conv2d(cnv6b, 512, [3, 3], stride=2, scope='cnv7')
+            cnv7b = slim.conv2d(cnv7,  512, [3, 3], stride=1, scope='cnv7b')
+
+            with tf.variable_scope('pose'):
+                pose_cnv7  = slim.conv2d(cnv6b, 256, [3, 3], stride=2, scope='cam_cnv7')
+                pose_pred = slim.conv2d(pose_cnv7, 8, [1, 1], scope='pred', 
+                    stride=1, normalizer_fn=None, activation_fn=None)
+                pose_avg = tf.reduce_mean(pose_pred, [1, 2])
+                # Empirically we found that scaling by a small constant 
+                # facilitates training.
+                pose_final = tf.reshape(pose_avg, [-1, 8])

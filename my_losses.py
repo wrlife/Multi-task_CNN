@@ -133,11 +133,12 @@ def compute_loss(output,data_dict,FLAGS):
 
         #import pdb;pdb.set_trace()
         gt_lm_3D = tf.matmul(quat_gt.as_rotation_matrix(), gt_cam_coord)+tf.tile(tf.expand_dims(translation[:,0:3]*tf.expand_dims(translation[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])#  +tf.tile(tf.expand_dims(translation[:,0:3]*translation[:,3],axis=2),[1,1,tf.shape(gt_cam_coord)[2]])
-        pred_lm_3D = tf.matmul(quat_est.as_rotation_matrix(), pred_lm_coord)+tf.expand_dims(pose[:,4:-1]*tf.expand_dims(pose[:,-1],axis=1),axis=2)#   +tf.tile(tf.expand_dims(pose[:,4:-1]*translation[:,-1],axis=2),[1,1,tf.shape(pred_lm_coord)[2]])
+        pred_lm_3D = tf.matmul(quat_est.as_rotation_matrix(), pred_lm_coord)+tf.tile(tf.expand_dims(pose[:,4:-1]*tf.expand_dims(pose[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])#   +tf.tile(tf.expand_dims(pose[:,4:-1]*translation[:,-1],axis=2),[1,1,tf.shape(pred_lm_coord)[2]])
 
         lm3d_weights = tf.clip_by_value(visibility,0.0,1.5)
         lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
         gt_lm_3D = gt_lm_3D*lm3d_weights
+        #import pdb;pdb.set_trace()
         transformation_loss = l2loss(gt_lm_3D,pred_lm_3D,lm3d_weights)
         
 

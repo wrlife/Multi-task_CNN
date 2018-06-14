@@ -7,6 +7,7 @@ import time
 import math
 import os
 from smoother import Smoother
+import cv2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -116,6 +117,14 @@ elif opt.model=="hourglass":
                                             tf.expand_dims(data_dict["points2D"][:,:,:,4],axis=3),
                                             tf.expand_dims(data_dict["points2D"][:,:,:,10],axis=3),
                                             tf.expand_dims(data_dict["points2D"][:,:,:,14],axis=3)],axis=3)
+
+elif opt.model=="with_tp":
+    #import pdb;pdb.set_trace()
+    template_mask = np.repeat(np.expand_dims(cv2.imread('template_mask.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
+    template_image = np.repeat(np.expand_dims(cv2.imread('template_image.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
+    tp_ms = tf.constant(template_mask)
+    tp_im = tf.constant(template_image)
+    input_ts = tf.concat([input_ts,tp_ms,tp_im],axis=3)
 
 
 #=======================
@@ -264,6 +273,8 @@ with sv.managed_session(config=config) as sess:
             if step % opt.summary_freq == 0:
                 fetches["loss"] = total_loss
                 fetches["summary"] = sv.summary_op
+                # fetches["gt3d"] = gt_lm_3D
+                # fetches["pred3d"]= pred_lm_3D
 
             #===============
             #Run fetch
@@ -287,7 +298,9 @@ with sv.managed_session(config=config) as sess:
                 sv.summary_writer.add_summary(results["summary"], gs)
                 print('Step %d: loss = %.2f (%.3f sec), Filter_size: %f' % (step, results["loss"],
                                                         duration, m_f_size))
-
+                #import pdb;pdb.set_trace()
+                # print(results["gt3d"][0,:,1])
+                # print(results["pred3d"][0,:,1])
             if step % opt.save_latest_freq == 0:
                 save(sess, opt.checkpoint_dir, gs,saver)
 
