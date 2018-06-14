@@ -11,7 +11,7 @@ from smoother import Smoother
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 flags = tf.app.flags
-flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/tfrecords_hr/", "Dataset directory")
+flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/data/tfrecords_hr_filldepth/", "Dataset directory")
 flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
@@ -62,32 +62,6 @@ def gauss_smooth(mask,FILTER_SIZE):
 
     return new_mask
     
-    
-def argmax_2d(tensor):
-
-    # input format: BxHxWxD
-    assert rank(tensor) == 4
-    
-    # flatten the Tensor along the height and width axes
-    flat_tensor = tf.reshape(tensor, (tf.shape(tensor)[0], -1, tf.shape(tensor)[3]))
-    
-    # argmax of the flat tensor
-    argmax = tf.cast(tf.argmax(flat_tensor, axis=1), tf.int32)
-    
-    # convert indexes into 2D coordinates
-    argmax_x = argmax // tf.shape(tensor)[2]
-    argmax_y = argmax % tf.shape(tensor)[2]
-    
-    # stack and return 2D coordinates
-    return tf.stack((argmax_x, argmax_y), axis=1)
-    
-def rank(tensor):
-
-    # return the rank of a Tensor
-    return len(tensor.get_shape())
-
-
-
 #------------------------------------------------
 #Training from data loading to loss computation
 #------------------------------------------------
@@ -163,7 +137,7 @@ kernel_size = tf.placeholder(tf.float32,name="k_size")
 #data_dict['points2D'] = new_mask
 
 #Compute loss
-total_loss,depth_loss,landmark_loss,vis_loss,quaternion_loss,translation_loss = compute_loss(output,data_dict,opt)
+total_loss,depth_loss,landmark_loss,vis_loss,transformation_loss = compute_loss(output,data_dict,opt)
 
 #------------------------------------------------
 #Evaluation
@@ -208,8 +182,7 @@ with tf.name_scope("train_op"):
     tf.summary.scalar('losses/total_loss', total_loss)
     tf.summary.scalar('losses/depth_loss', depth_loss)
     tf.summary.scalar('losses/landmark_loss', landmark_loss)
-    tf.summary.scalar('losses/quaternion_loss', quaternion_loss)
-    tf.summary.scalar('losses/translation_loss', translation_loss)
+    tf.summary.scalar('losses/transformation_loss', transformation_loss)
     tf.summary.scalar('losses/vis_loss', vis_loss)
     
     tf.summary.image('train_image' , \
@@ -314,6 +287,7 @@ with sv.managed_session(config=config) as sess:
                 sv.summary_writer.add_summary(results["summary"], gs)
                 print('Step %d: loss = %.2f (%.3f sec), Filter_size: %f' % (step, results["loss"],
                                                         duration, m_f_size))
+
             if step % opt.save_latest_freq == 0:
                 save(sess, opt.checkpoint_dir, gs,saver)
 

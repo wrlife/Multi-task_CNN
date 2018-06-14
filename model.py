@@ -257,7 +257,7 @@ def disp_net_single(tgt_image, is_training=True, is_reuse=False):
             
             
             end_points = utils.convert_collection_to_dict(end_points_collection)
-            return [disp1, disp2, disp3, disp4], land_mark,cnv7b, end_points
+            return [disp1, disp2, disp3, disp4], land_mark, end_points
 
 
 

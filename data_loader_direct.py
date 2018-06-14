@@ -63,17 +63,17 @@ class DataLoader(object):
             # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
             # [mnist.IMAGE_PIXELS].
             image = tf.decode_raw(features['color'], tf.float64)
-            IR = tf.decode_raw(features['IR'], tf.float64)/255.0
-            depth = tf.decode_raw(features['depth'], tf.float64)/100.0
+            IR = tf.decode_raw(features['IR'], tf.float32)/255.0
+            depth = tf.decode_raw(features['depth'], tf.float32)/1000.0
             label = tf.decode_raw(features['mask'], tf.uint8)
             quaternion = tf.decode_raw(features['quaternion'], tf.float64)
             translation = tf.decode_raw(features['translation'], tf.float64)
             points2D = tf.decode_raw(features['landmark_heatmap'], tf.float32)
-            visibility = tf.decode_raw(features['visibility'], tf.float64)
+            visibility = tf.decode_raw(features['visibility'], tf.float32)
             matK = tf.decode_raw(features['matK'], tf.float64)
 
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)
-            image = tf.image.rgb_to_grayscale(image)/255.0
+            #image = tf.image.rgb_to_grayscale(image)/255.0
 
             IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
             depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
