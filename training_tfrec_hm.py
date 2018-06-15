@@ -43,7 +43,7 @@ opt = flags.FLAGS
 #FILTER_SIZE = 9
 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def save(sess, checkpoint_dir, step, saver):
     model_name = 'model'
@@ -62,7 +62,119 @@ def gauss_smooth(mask,FILTER_SIZE):
     new_mask = smoother.get_output()
 
     return new_mask
+
+#==========================
+#Construct input
+#==========================
+
+def construct_input(opt, data_dict):
+
+    #Concatenate color and depth for model input
+    if opt.inputs == "all":
+        input_ts = tf.concat([data_dict['IR'],data_dict['depth'],data_dict['image']],axis=3) #data_dict['depth'],
+    elif opt.inputs == "IR_depth":
+        input_ts = tf.concat([data_dict['IR'],data_dict['depth']],axis=3)
+    elif opt.inputs == "depth_color":
+        input_ts = tf.concat([data_dict['depth'],data_dict['image']],axis=3)
+    elif opt.inputs =="IR_color":
+        input_ts = tf.concat([data_dict['IR'],data_dict['image']],axis=3)
+    elif opt.inputs =="IR":
+        input_ts = data_dict['IR']
+    elif opt.inputs =="color":
+        input_ts = data_dict['image']
+    elif opt.inputs =="depth":
+        input_ts = data_dict['depth']
     
+    return input_ts
+
+
+
+#=======================
+#Construct model
+#=======================
+def construct_model(opt, data_dict, input_ts):
+    if opt.model=="lastdecode":
+        output = disp_net(tf.cast(input_ts,tf.float32))
+    elif opt.model=="single":
+        output = disp_net_single(tf.cast(input_ts,tf.float32))
+    elif opt.model=="pose":
+        output = disp_net_single_pose(tf.cast(input_ts,tf.float32))
+    elif opt.model=="multiscale":
+        output = disp_net_single_multiscale(tf.cast(input_ts,tf.float32))
+    elif opt.model=="hourglass":
+        initial_output = disp_net_initial(tf.cast(input_ts,tf.float32))
+        input_ts = tf.concat([input_ts,initial_output[1]],axis=3)
+        refine_output = disp_net_refine(tf.cast(input_ts,tf.float32))
+        output = [initial_output,refine_output]
+        data_dict["landmark_init"] = tf.concat([tf.expand_dims(data_dict["points2D"][:,:,:,0],axis=3),
+                                                tf.expand_dims(data_dict["points2D"][:,:,:,4],axis=3),
+                                                tf.expand_dims(data_dict["points2D"][:,:,:,10],axis=3),
+                                                tf.expand_dims(data_dict["points2D"][:,:,:,14],axis=3)],axis=3)
+    elif opt.model=="with_tp":
+        #import pdb;pdb.set_trace()
+        #template_mask = np.repeat(np.expand_dims(cv2.imread('template_mask.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
+        template_image = np.repeat(np.expand_dims(cv2.imread('template_image.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
+        #tp_ms = tf.constant(template_mask)
+        tp_im = tf.constant(template_image)
+        input_ts = tf.concat([input_ts,tp_im],axis=3)
+        output = disp_net_single(tf.cast(input_ts,tf.float32))
+
+
+    #=======================
+    #Construct output
+    #=======================
+    #pred = output[0]
+    if opt.model == "multiscale":
+        pred_landmark = output[1][0]
+    elif opt.model=="hourglass":
+        pred_landmark = output[1][1]
+    else:
+        pred_landmark = output[1]
+    
+    return output,pred_landmark
+
+
+#=============================
+#Construct summaries
+#=============================
+def construct_summary(losses,data_dict):
+
+    #Summary
+    total_loss = tf.summary.scalar('losses/total_loss', losses[0])
+    seg_loss = tf.summary.scalar('losses/seg_loss', losses[1])
+    landmark_loss = tf.summary.scalar('losses/landmark_loss', losses[2])
+    transformation_loss = tf.summary.scalar('losses/transformation_loss', losses[3])
+    vis_loss = tf.summary.scalar('losses/vis_loss', losses[4])
+    image = tf.summary.image('image' , \
+                        data_dict['image'])
+
+    # if opt.with_seg:
+    #     tf.summary.image('gt_label' , \
+    #                         data_dict['label'])
+        # tf.summary.image('pred_label' , \
+        #                     pred[0])
+                        
+    # random_landmark = tf.placeholder(tf.int32)
+    # gt_landmark = tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#tf.reduce_sum(data_dict['points2D'],3),axis=3)
+    # pred_landmark = tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#tf.reduce_sum(pred_landmark[0],3),axis=3)
+    # tf.summary.image('gt_lm_img' , \
+    #                     gt_landmark)
+    # tf.summary.image('pred_lm_img' , \
+    #                     pred_landmark)
+    return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image])
+
+    
+def feed_dict(train):
+    """Make a TensorFlow feed_dict: maps data onto Tensor placeholders."""
+    if train or FLAGS.fake_data:
+        xs, ys = mnist.train.next_batch(100, fake_data=FLAGS.fake_data)
+        k = FLAGS.dropout
+    else:
+        xs, ys = mnist.test.images, mnist.test.labels
+        k = 1.0
+    return {x: xs, y_: ys, keep_prob: k}
+
+
 #------------------------------------------------
 #Training from data loading to loss computation
 #------------------------------------------------
@@ -75,85 +187,33 @@ imageloader = DataLoader(opt.dataset_dir,  #'D:\\Exp_data\\data\\2017_0216_Detec
 # Load training data
 data_dict = imageloader.inputs(opt.batch_size,opt.max_steps,opt.data_aug)  # batch_size, num_epochs
 
+#Construct input accordingly
+input_ts = construct_input(opt, data_dict)
 
-
-
-#==========================
-#Construct input
-#==========================
-#Concatenate color and depth for model input
-if opt.inputs == "all":
-    input_ts = tf.concat([data_dict['IR'],data_dict['depth'],data_dict['image']],axis=3) #data_dict['depth'],
-elif opt.inputs == "IR_depth":
-    input_ts = tf.concat([data_dict['IR'],data_dict['depth']],axis=3)
-elif opt.inputs == "depth_color":
-    input_ts = tf.concat([data_dict['depth'],data_dict['image']],axis=3)
-elif opt.inputs =="IR_color":
-    input_ts = tf.concat([data_dict['IR'],data_dict['image']],axis=3)
-elif opt.inputs =="IR":
-    input_ts = data_dict['IR']
-elif opt.inputs =="color":
-    input_ts = data_dict['image']
-elif opt.inputs =="depth":
-    input_ts = data_dict['depth']
-
-#=======================
-#Construct model
-#=======================
-if opt.model=="lastdecode":
-    output = disp_net(tf.cast(input_ts,tf.float32))
-elif opt.model=="single":
-    output = disp_net_single(tf.cast(input_ts,tf.float32))
-elif opt.model=="pose":
-    output = disp_net_single_pose(tf.cast(input_ts,tf.float32))
-elif opt.model=="multiscale":
-    output = disp_net_single_multiscale(tf.cast(input_ts,tf.float32))
-elif opt.model=="hourglass":
-    initial_output = disp_net_initial(tf.cast(input_ts,tf.float32))
-    input_ts = tf.concat([input_ts,initial_output[1]],axis=3)
-    refine_output = disp_net_refine(tf.cast(input_ts,tf.float32))
-    output = [initial_output,refine_output]
-    data_dict["landmark_init"] = tf.concat([tf.expand_dims(data_dict["points2D"][:,:,:,0],axis=3),
-                                            tf.expand_dims(data_dict["points2D"][:,:,:,4],axis=3),
-                                            tf.expand_dims(data_dict["points2D"][:,:,:,10],axis=3),
-                                            tf.expand_dims(data_dict["points2D"][:,:,:,14],axis=3)],axis=3)
-
-elif opt.model=="with_tp":
-    #import pdb;pdb.set_trace()
-    template_mask = np.repeat(np.expand_dims(cv2.imread('template_mask.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
-    template_image = np.repeat(np.expand_dims(cv2.imread('template_image.png').astype(np.float32),axis=0),opt.batch_size,0)/255.0
-    tp_ms = tf.constant(template_mask)
-    tp_im = tf.constant(template_image)
-    input_ts = tf.concat([input_ts,tp_ms,tp_im],axis=3)
-
-
-#=======================
-#Construct output
-#=======================
-#pred = output[0]
-if opt.model == "multiscale":
-    pred_landmark = output[1][0]
-elif opt.model=="hourglass":
-    pred_landmark = output[1][1]
-else:
-    pred_landmark = output[1]
+#Select model accordingly
+output,pred_landmark = construct_model(opt, data_dict, input_ts)
 
 #Use larger Gaussian mask in the first few thousand iterations of training
 #use_large_gauss = tf.placeholder(tf.float32,name="condition")
-kernel_size = tf.placeholder(tf.float32,name="k_size")
+#kernel_size = tf.placeholder(tf.float32,name="k_size")
 #new_mask = gauss_smooth(data_dict['points2D'],kernel_size)
-
 #data_dict['points2D'] = new_mask
 
 #Compute loss
-total_loss,depth_loss,landmark_loss,vis_loss,transformation_loss = compute_loss(output,data_dict,opt)
+losses = compute_loss(output,data_dict,opt)
+#total_loss,depth_loss,landmark_loss,vis_loss,transformation_loss
+
+#Summaries
+train_merged = construct_summary(losses,data_dict)
+
+
+
+
 
 #------------------------------------------------
 #Evaluation
 #------------------------------------------------
 if opt.evaluation_dir != "None":
-
-    #import pdb;pdb.set_trace()
     #Initialize evaluation
     imageloader_val = DataLoader(opt.evaluation_dir,  #'D:\\Exp_data\\data\\2017_0216_DetectorDetection\\tfrecords'
                                 1,
@@ -163,19 +223,25 @@ if opt.evaluation_dir != "None":
     # Load training data
     data_dict_val = imageloader_val.inputs(opt.batch_size,opt.max_steps)  # batch_size, num_epochs
     
-    #Construct model
-    #Concatenate color and depth for model input
-    input_ts_val = tf.concat([data_dict_val['IR'],data_dict_val['depth'],data_dict_val['image']],axis=3) #data_dict['depth'],
-    pred_val, pred_landmark_val, _ = disp_net_single(tf.cast(input_ts_val,tf.float32), is_training=False,is_reuse=True)
-    
-    val_lm_coord = argmax_2d(pred_landmark_val)
-    gt_lm_coord = argmax_2d(data_dict_val['points2D'])
-    #import pdb;pdb.set_trace()
-    diff = val_lm_coord-gt_lm_coord
-    avg_dist = tf.reduce_mean(tf.sqrt(tf.cast(tf.reduce_sum(diff**2,1),tf.float32)))
-  
-  
+    #Construct input accordingly
+    input_ts_val = construct_input(opt, data_dict_val)
 
+    #Select model accordingly
+    output_val,pred_landmark_val = construct_model(opt, data_dict, input_ts_val)    
+
+    #Compute loss
+    losses_val = compute_loss(output_val,data_dict_val,opt)
+    #total_loss_val,depth_loss_val,landmark_loss_val,vis_loss_val,transformation_loss_val
+
+    #Summaries
+    eval_merged = construct_summary(losses_val,data_dict_val)
+
+    # val_lm_coord = argmax_2d(pred_landmark_val)
+    # gt_lm_coord = argmax_2d(data_dict_val['points2D'])
+    # diff = val_lm_coord-gt_lm_coord
+    # avg_dist = tf.reduce_mean(tf.sqrt(tf.cast(tf.reduce_sum(diff**2,1),tf.float32)))
+  
+  
 with tf.name_scope("train_op"):
 
     #Optimization
@@ -187,43 +253,6 @@ with tf.name_scope("train_op"):
                                 trainable = False)
     incr_global_step = tf.assign(global_step,global_step+1)
 
-    #Summary
-    tf.summary.scalar('losses/total_loss', total_loss)
-    tf.summary.scalar('losses/depth_loss', depth_loss)
-    tf.summary.scalar('losses/landmark_loss', landmark_loss)
-    tf.summary.scalar('losses/transformation_loss', transformation_loss)
-    tf.summary.scalar('losses/vis_loss', vis_loss)
-    
-    tf.summary.image('train_image' , \
-                        data_dict['image'])
-
-    if opt.with_seg:
-        tf.summary.image('gt_label' , \
-                            data_dict['label'])
-        # tf.summary.image('pred_label' , \
-        #                     pred[0])
-                        
-    random_landmark = tf.placeholder(tf.int32)
-    gt_landmark = tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#tf.reduce_sum(data_dict['points2D'],3),axis=3)
-    pred_landmark = tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#tf.reduce_sum(pred_landmark[0],3),axis=3)
-    tf.summary.image('gt_lm_img' , \
-                        gt_landmark)
-    tf.summary.image('pred_lm_img' , \
-                        pred_landmark)    
-                        
-    #Validation
-    if opt.evaluation_dir != "None":
-        tf.summary.scalar('Evaluation/avg_dist', avg_dist)
-        
-        gt_landmark_val = tf.expand_dims(data_dict_val['points2D'][:,:,:,random_landmark],axis=3)#tf.reduce_sum(data_dict['points2D'],3),axis=3)
-        pred_landmark_val = tf.expand_dims(pred_landmark_val[:,:,:,random_landmark],axis=3)#tf.reduce_sum(pred_landmark[0],3),axis=3)
-        tf.summary.image('gt_lm_img_val' , \
-                            gt_landmark_val)
-        tf.summary.image('pred_lm_img_val' , \
-                            pred_landmark_val)
-    
-
-
 
 #Start training
 with tf.name_scope("parameter_count"):
@@ -234,14 +263,19 @@ saver = tf.train.Saver([var for var in tf.model_variables()] + \
                             [global_step],
                             max_to_keep=10)
 
-sv = tf.train.Supervisor(logdir=opt.checkpoint_dir, 
-                            save_summaries_secs=0, 
-                            saver=None)
+# sv = tf.train.Supervisor(logdir=opt.checkpoint_dir, 
+#                             save_summaries_secs=0, 
+#                             saver=None)
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 
 # Session start
-with sv.managed_session(config=config) as sess:
+with tf.Session(config=config) as sess:#sv.managed_session(config=config) as sess:
+
+    train_writer = tf.summary.FileWriter(FLAGS.checkpoint_dir + '/logs/train',
+                                            sess.graph)
+    eval_writer = tf.summary.FileWriter(FLAGS.checkpoint_dir + '/logs/eval')
+
 
     # Load parameters
     print('Trainable variables: ')
@@ -271,8 +305,10 @@ with sv.managed_session(config=config) as sess:
 
             # Fetch summary
             if step % opt.summary_freq == 0:
-                fetches["loss"] = total_loss
-                fetches["summary"] = sv.summary_op
+                fetches["loss"] = losses[0]
+                fetches["summary_train"] = train_merged
+                if opt.evaluation_dir != "None":
+                    fetches["summary_eval"] = eval_merged
                 # fetches["gt3d"] = gt_lm_3D
                 # fetches["pred3d"]= pred_lm_3D
 
@@ -289,13 +325,17 @@ with sv.managed_session(config=config) as sess:
             m_f_size = 9.0
                 
                 
-            results = sess.run(fetches,feed_dict={kernel_size:m_f_size,random_landmark:np.random.randint(5)})
+            results = sess.run(fetches) #,feed_dict={kernel_size:m_f_size,random_landmark:np.random.randint(5)}
             
             # Save and print log
             duration = time.time() - start_time
             gs = results["global_step"]
             if step % opt.summary_freq == 0:
-                sv.summary_writer.add_summary(results["summary"], gs)
+
+                train_writer.add_summary(results["summary_train"], gs)
+                if opt.evaluation_dir != "None":
+                    eval_writer.add_summary(results["summary_eval"], gs)
+                # sv.summary_writer.add_summary(results["summary"], gs)
                 print('Step %d: loss = %.2f (%.3f sec), Filter_size: %f' % (step, results["loss"],
                                                         duration, m_f_size))
                 #import pdb;pdb.set_trace()
