@@ -381,17 +381,17 @@ class DataLoader(object):
         # Random scaling
         def random_scaling(ir, image, depth, label,landmark):
             batch_size, in_h, in_w, _ = image.get_shape().as_list()
-            scaling = tf.random_uniform([2], 1, 1.15)
+            scaling = tf.random_uniform([2], 1, 1.25)
             x_scaling = scaling[0]
             y_scaling = scaling[1]
             out_h = tf.cast(in_h * y_scaling, dtype=tf.int32)
             out_w = tf.cast(in_w * x_scaling, dtype=tf.int32)
 
             image = tf.image.resize_area(image, [out_h, out_w])
-            depth = tf.image.resize_area(depth, [out_h, out_w])
-            label = tf.image.resize_area(label, [out_h, out_w])
+            depth = tf.image.resize_nearest_neighbor(depth, [out_h, out_w])
+            label = tf.image.resize_nearest_neighbor(label, [out_h, out_w])
             ir = tf.image.resize_area(ir, [out_h, out_w])
-            landmark = tf.image.resize_area(landmark, [out_h, out_w])
+            landmark = tf.image.resize_nearest_neighbor(landmark, [out_h, out_w])
             return ir, image, depth, label,landmark
 
         # Random cropping
@@ -459,8 +459,8 @@ class DataLoader(object):
 
             return image     
 
-        # ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
-        # ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
+        ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
+        ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
         ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
         #image = random_color(image)
 
