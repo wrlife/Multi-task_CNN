@@ -372,7 +372,12 @@ class DataLoader(object):
 
 
     def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w):
-           
+
+        def _random_true_false():
+            prob = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
+            predicate = tf.less(prob, 0.5)
+            return predicate
+
         # Random scaling
         def random_scaling(ir, image, depth, label,landmark):
             batch_size, in_h, in_w, _ = image.get_shape().as_list()
@@ -412,21 +417,19 @@ class DataLoader(object):
         # Random flip
         def random_flip(ir, image, depth, label,landmark):
             # batch_size, in_h, in_w, _ = im.get_shape().as_list()
+            flip1 = _random_true_false()
+            image = tf.cond(flip1, lambda:tf.image.flip_left_right(image),lambda:image)
+            depth = tf.cond(flip1, lambda:tf.image.flip_left_right(depth),lambda:depth)
+            label = tf.cond(flip1, lambda:tf.image.flip_left_right(label),lambda:label)
+            landmark = tf.cond(flip1, lambda:tf.image.flip_left_right(landmark),lambda:landmark)
+            ir = tf.cond(flip1, lambda:tf.image.flip_left_right(ir),lambda:ir)
 
-            flips = np.random.randint(2, size=2)
-
-            if flips[0]==1:
-                image = tf.image.flip_left_right(image)
-                depth = tf.image.flip_left_right(depth)
-                label = tf.image.flip_left_right(label)
-                landmark = tf.image.flip_left_right(landmark)
-                ir = tf.image.flip_left_right(ir)
-            if flips[1]==1:
-                image = tf.image.flip_up_down(image)
-                depth = tf.image.flip_up_down(depth)
-                label = tf.image.flip_up_down(label)
-                landmark = tf.image.flip_up_down(landmark)
-                ir = tf.image.flip_up_down(ir)
+            flip2 = _random_true_false()
+            image = tf.cond(flip2, lambda:tf.image.flip_up_down(image),lambda:image)
+            depth = tf.cond(flip2, lambda:tf.image.flip_up_down(depth),lambda:depth)
+            label = tf.cond(flip2, lambda:tf.image.flip_up_down(label),lambda:label)
+            landmark = tf.cond(flip2, lambda:tf.image.flip_up_down(landmark),lambda:landmark)
+            ir = tf.cond(flip2, lambda:tf.image.flip_up_down(ir),lambda:ir)
 
             return ir,image, depth, label,landmark
 
