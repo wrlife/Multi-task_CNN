@@ -157,11 +157,11 @@ def construct_summary(losses,data_dict,pred_landmark):
     # random_landmark = tf.placeholder(tf.int32)
     gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)#tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#
     pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
-    tf.summary.image('gt_lm_img' , \
+    landmark_sum = tf.summary.image('gt_lm_img' , \
                         gt_landmark)
-    tf.summary.image('pred_lm_img' , \
+    pred_landmark_sum = tf.summary.image('pred_lm_img' , \
                         pred_landmark)
-    return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image]) #
+    return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image,landmark_sum,pred_landmark_sum]) #
 
     
 def feed_dict(train):
@@ -245,7 +245,8 @@ if opt.evaluation_dir != "None":
 share_loss = tf.placeholder(tf.bool, shape=())
 inputloss = tf.cond(share_loss, lambda: losses, lambda: losses_val)
 input_landmark = tf.cond(share_loss, lambda: pred_landmark, lambda: pred_landmark_val)
-merged = construct_summary(inputloss,data_dict,input_landmark)
+input_data = tf.cond(share_loss, lambda: data_dict, lambda: data_dict_val)
+merged = construct_summary(inputloss,input_data,input_landmark)
 #Summaries
 #eval_merged = construct_summary(losses_val,data_dict_val)
 

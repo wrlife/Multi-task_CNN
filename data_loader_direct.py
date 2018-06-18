@@ -149,7 +149,7 @@ class DataLoader(object):
             # in memory. The parameter is the number of elements in the buffer. For
             # completely uniform shuffling, set the parameter to be the same as the
             # number of elements in the dataset.
-            dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
+            #dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
             if with_aug:
@@ -456,8 +456,8 @@ class DataLoader(object):
 
             return image     
 
-        ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
-        ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
+        # ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
+        # ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
         ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
         #image = random_color(image)
 
