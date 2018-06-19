@@ -41,6 +41,20 @@ flags.DEFINE_boolean("training", True, "if False, start prediction")
 
 opt = flags.FLAGS
 
+opt.checkpoint_dir="./checkpoints/"+opt.inputs+"_"+opt.model
+if opt.data_aug:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_dataaug"
+if opt.with_pose:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
+if opt.domain_transfer_dir!="None":
+    opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
+
+opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)
+
+if not os.path.exists(opt.checkpoint_dir):
+    os.makedirs(opt.checkpoint_dir)
+
+write_params(opt)
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 #==========================
@@ -102,6 +116,8 @@ if opt.domain_transfer_dir != "None":
                                             output)
     losses = list(losses)
     losses[0] = losses[0]+gen_loss
+else:
+    train_adv=0
 
 
 #==========================
@@ -109,6 +125,7 @@ if opt.domain_transfer_dir != "None":
 #==========================
 pred_landmark = m_trainer.parse_output_landmark(output)
 pred_landmark_eval = m_trainer.parse_output_landmark(output_eval)
+
 training(
     opt,
     m_trainer,

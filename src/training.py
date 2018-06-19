@@ -77,7 +77,8 @@ def training(opt,m_trainer,losses,losses_eval,
                     "global_step": global_step,
                     "incr_global_step": incr_global_step
                 }
-                if opt.domain_transfer_dir!=None:
+
+                if opt.domain_transfer_dir!="None":
                     fetches["train_adv"] = train_adv
 
                 # Fetch summary

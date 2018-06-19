@@ -213,3 +213,24 @@ class estimator_rui:
 
         return losses, output, data_dict
         
+
+
+def write_params(opt):
+    params = open(opt.checkpoint_dir+"/params.txt","w")
+
+    params.write("dataset_dir: "+opt.dataset_dir+"\n")
+    params.write("evaluation_dir: "+opt.evaluation_dir)
+    params.write("domain_transfer_dir: "+opt.domain_transfer_dir+"\n")
+    params.write("learning_rate: "+str(opt.learning_rate)+"\n")
+    params.write("learning_rate2: "+str(opt.learning_rate2)+"\n")
+    params.write("batch_size: "+str(opt.batch_size)+"\n")
+    params.write("img_height: "+str(opt.img_height)+"\n")
+    params.write("img_width: "+str(opt.img_width)+"\n")
+    params.write("max_steps: "+str(opt.max_steps)+"\n")
+    params.write("model: "+opt.model+"\n")
+    params.write("inputs: "+opt.inputs+"\n")
+    params.write("data_aug: "+str(opt.data_aug)+"\n")
+    params.write("with_seg: "+str(opt.with_seg)+"\n")
+    params.write("with_pose: "+str(opt.with_pose)+"\n")
+
+    params.close()
