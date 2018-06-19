@@ -91,8 +91,6 @@ def compute_loss(output,data_dict,FLAGS):
     landmark = data_dict['points2D']
     visibility = data_dict['visibility']
 
-    visibility
-
     quaternion = data_dict['quaternion']
     translation = data_dict['translation']
     depth = data_dict["depth"]
@@ -162,4 +160,49 @@ def compute_loss(output,data_dict,FLAGS):
     total_loss = depth_loss+landmark_loss+vis_loss+transformation_loss
 
     return total_loss,depth_loss,landmark_loss,vis_loss,transformation_loss
+
+
+
+def camera_loss(landmark1,landmark2,pose,data_dict):
+
+    visibility = data_dict['visibility']
+
+    quaternion = data_dict['quaternion']
+    translation = data_dict['translation']
+    depth = data_dict["depth"]
+
+
+    quat_est = tfq.Quaternion(pose[:,0:4])
+    quat_gt = tfq.Quaternion(quaternion)
+
+    #Get gt and estimate landmark locations
+    pred_lm_coord = tf.reverse(argmax_2d(pred_landmark),[1])
+    gt_lm_coord = tf.reverse(argmax_2d(landmark),[1])
+    
+    #import pdb;pdb.set_trace()
+
+    batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(pred_landmark)[0]), 1), [1, tf.shape(pred_landmark)[3]])
+    index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(gt_lm_coord,[1]),[0,2,1])], axis=2)
+    index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(pred_lm_coord,[1]),[0,2,1])], axis=2)
+
+
+    gt_depth_val = tf.gather_nd(depth[:,:,:,0],index_gt)*100.0
+    pred_depth_val = tf.gather_nd(depth[:,:,:,0],index_pred)*100.0
+    
+    ones = tf.ones([tf.shape(pred_landmark)[0], 1, tf.shape(pred_landmark)[3]])
+    pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
+    gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
+
+    gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,data_dict["matK"])
+    pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,data_dict["matK"])
+
+    #import pdb;pdb.set_trace()
+    gt_lm_3D = tf.matmul(quat_gt.as_rotation_matrix(), gt_cam_coord)+tf.tile(tf.expand_dims(translation[:,0:3]*tf.expand_dims(translation[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])#  +tf.tile(tf.expand_dims(translation[:,0:3]*translation[:,3],axis=2),[1,1,tf.shape(gt_cam_coord)[2]])
+    pred_lm_3D = tf.matmul(quat_est.as_rotation_matrix(), pred_lm_coord)+tf.tile(tf.expand_dims(pose[:,4:-1]*tf.expand_dims(pose[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])#   +tf.tile(tf.expand_dims(pose[:,4:-1]*translation[:,-1],axis=2),[1,1,tf.shape(pred_lm_coord)[2]])
+
+    lm3d_weights = tf.clip_by_value(visibility,0.0,1.5)
+    lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
+    gt_lm_3D = gt_lm_3D*lm3d_weights
+    #import pdb;pdb.set_trace()
+    transformation_loss = l2loss(gt_lm_3D,pred_lm_3D,lm3d_weights)    
 

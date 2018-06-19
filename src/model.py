@@ -864,3 +864,5 @@ def disp_net_pose(tgt_image, is_training=True, is_reuse=False):
                 # Empirically we found that scaling by a small constant 
                 # facilitates training.
                 pose_final = tf.reshape(pose_avg, [-1, 8])
+
+            return pose_final

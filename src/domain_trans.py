@@ -26,7 +26,7 @@ class domain_trans:
         weight_gen = 1000
         weight_disc = 1000
 
-        _, pred_landmark_dom, output_dom, data_dict_dom = self.trainer.forward_wrapper(domain_transfer_dir,scope_name,is_training=True,is_reuse=True,with_loss=False,test_input=True)
+        _, output_dom, data_dict_dom = self.trainer.forward_wrapper(domain_transfer_dir,scope_name,is_training=True,is_reuse=True,with_loss=False,test_input=True)
 
         #=========================
         #GAN for domain adaptation
@@ -47,6 +47,7 @@ class domain_trans:
         #Construct summaries
         tf.summary.image('domain/image' , \
                             data_dict_dom['image'])
+        pred_landmark_dom = self.trainer.parse_output_landmark(output_dom)
         pred_landmark_dom = tf.expand_dims(tf.reduce_sum(pred_landmark_dom,3),axis=3)
         tf.summary.image('domain_lm_img' , \
                             pred_landmark_dom)

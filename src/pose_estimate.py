@@ -17,37 +17,67 @@ class pose_estimate:
         self.trainer = trainer
 
     
-    def forward_wrapper(self,domain_transfer_dir,scope_name,output_src):
+    def forward_wrapper(self,output,data_dict):
         '''
         A wrapper function for domain transfer.
         Generate dataloader, model, loss and its own summary
         '''
+        landmark1 = tf.expand_dims(output[1][0,:,:,:],axis=0)
+        landmark2 = tf.expand_dims(output[1][1,:,:,:],axis=0)
 
-        _, pred_landmark_dom, output_dom, data_dict_dom = self.trainer.forward_wrapper(domain_transfer_dir,scope_name,is_training=True,is_reuse=True,with_loss=False,test_input=True)
+        depth1 = tf.expand_dims(data_dict["depth"][0,:,:,:]*100.0,axis=0)
+        depth2 = tf.expand_dims(data_dict["depth"][1,:,:,:]*100.0,axis=0)
 
-        #=========================
-        #GAN for domain adaptation
-        #=========================
+        input_pose = tf.concat([landmark1,depth1,landmark2,depth2],axis=3)
 
-        with tf.variable_scope("disc_model") as scope:
-            disc_real = discriminator(output_src[2])
-            disc_fake = discriminator(output_dom[2],is_training=True, is_reuse=True)
+        pose_final = disp_net_pose(tf.cast(input_pose,tf.float32))
+        quat_est = tfq.Quaternion(pose_final[:,0:4])
 
-        #Consturct loss
-        gen_loss = -tf.reduce_mean(tf.log(disc_fake))*weight_gen
-        disc_loss = -tf.reduce_mean(tf.log(disc_real) + tf.log(1. - disc_fake))*weight_disc
+        visibility1 = tf.expand_dims(data_dict['visibility'][0,:],axis=0)
+        visibility2 = tf.expand_dims(data_dict['visibility'][1,:],axis=0)
 
-        #Construct discriminator
-        optim_adv = tf.train.AdamOptimizer(self.trainer.opt.learning_rate2, self.trainer.opt.beta1)
-        train_adv = slim.learning.create_train_op(disc_loss, optim_adv, variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'disc_model'))
+        # quaternion1 = tf.expand_dims(data_dict['quaternion'][0,:],axis=0)
+        # quaternion2 = tf.expand_dims(data_dict['quaternion'][1,:],axis=0)
+
+        # quat_gt1 = tfq.Quaternion(quaternion1)
+        # quat_gt2 = tfq.Quaternion(quaternion2)
+
+        # translation1 = tf.expand_dims(data_dict['translation'][0,:],axis=0)
+        # translation2 = tf.expand_dims(data_dict['translation'][0,:],axis=0)
+
+
+       #Get gt and estimate landmark locations
+        pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
+        gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
+
+        batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(landmark1)[3]])
+        index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(gt_lm_coord,[1]),[0,2,1])], axis=2)
+        index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(pred_lm_coord,[1]),[0,2,1])], axis=2)
+
+
+        gt_depth_val = tf.gather_nd(depth1,index_gt)
+        pred_depth_val = tf.gather_nd(depth2,index_pred)
+        
+        ones = tf.ones([tf.shape(landmark2)[0], 1, tf.shape(landmark2)[3]])
+        pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
+        gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
+
+        gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
+        pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
+
+        #import pdb;pdb.set_trace()
+        # gt_lm_3D = tf.matmul(quat_gt.as_rotation_matrix(), gt_cam_coord)+tf.tile(tf.expand_dims(translation[:,0:3]*tf.expand_dims(translation[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])
+        
+        
+        pred_lm_3D = tf.matmul(quat_est.as_rotation_matrix(), pred_lm_coord)+tf.tile(tf.expand_dims(pose_final[:,4:-1]*tf.expand_dims(pose_final[:,-1],axis=1),axis=2),[1,1,tf.shape(gt_cam_coord)[2]])
+
+        #Loss
+        lm3d_weights = tf.clip_by_value(visibility1,0.0,1.5)
+        lm3d_weights = tf.clip_by_value(visibility2,0.0,1.5)*lm3d_weights
+        lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
+        transformation_loss = l2loss(gt_cam_coord,pred_lm_3D,lm3d_weights)        
 
         #Construct summaries
-        tf.summary.image('domain/image' , \
-                            data_dict_dom['image'])
-        pred_landmark_dom = tf.expand_dims(tf.reduce_sum(pred_landmark_dom,3),axis=3)
-        tf.summary.image('domain_lm_img' , \
-                            pred_landmark_dom)
-        tf.summary.scalar('losses/gen_loss', gen_loss)
-        tf.summary.scalar('losses/disc_loss', disc_loss)
+        tf.summary.scalar('losses/transformation', transformation_loss)
         
-        return gen_loss,disc_loss,train_adv
+        return transformation_loss

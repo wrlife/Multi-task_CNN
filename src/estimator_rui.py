@@ -60,8 +60,9 @@ class estimator_rui:
     '''
     A wrapper function which create data, model and loss according to input type
     '''
-    def __init__(self,flags):
+    def __init__(self,flags,scope_name):
         self.opt = flags
+        self.scope_name = scope_name
 
     
     def gauss_smooth(self,mask,FILTER_SIZE):
@@ -130,19 +131,29 @@ class estimator_rui:
                 input_ts = tf.concat([input_ts,tp_im],axis=3)
                 output = disp_net_single(tf.cast(input_ts,tf.float32))
 
-            #=======================
-            #Construct output
-            #=======================
-            if self.opt.model == "multiscale":
-                pred_landmark = output[1][0]
-            elif self.opt.model=="hourglass":
-                pred_landmark = output[1][1]
-            else:
-                pred_landmark = output[1]
+            # #=======================
+            # #Construct output
+            # #=======================
+            # if self.opt.model == "multiscale":
+            #     pred_landmark = output[1][0]
+            # elif self.opt.model=="hourglass":
+            #     pred_landmark = output[1][1]
+            # else:
+            #     pred_landmark = output[1]
         
-        return output,pred_landmark
+        return output
 
-
+    def parse_output_landmark(self,output):
+        #=======================
+        #Construct output
+        #=======================
+        if self.opt.model == "multiscale":
+            pred_landmark = output[1][0]
+        elif self.opt.model=="hourglass":
+            pred_landmark = output[1][1]
+        else:
+            pred_landmark = output[1]
+        return pred_landmark
 
     def construct_summary(self,losses,data_dict,pred_landmark):
         '''
@@ -192,7 +203,7 @@ class estimator_rui:
         input_ts = self.construct_input(data_dict)
 
         #Select model accordingly
-        output,pred_landmark = self.construct_model(input_ts,is_training, is_reuse,scope_name)
+        output = self.construct_model(input_ts,is_training, is_reuse,scope_name)
 
         #Compute loss accordingly
         if with_loss:
@@ -200,5 +211,5 @@ class estimator_rui:
         else:
             losses = 0
 
-        return losses, pred_landmark, output, data_dict
+        return losses, output, data_dict
         
