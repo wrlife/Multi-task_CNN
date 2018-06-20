@@ -41,12 +41,12 @@ def conv_encoder(num_encode,input_,num_features,max_features=512):
         #Upper bound for max number of features
         if num_features*(2**i)>max_features:
             curr_features = max_features
-        else
+        else:
             curr_features = num_features*(2**i)
-        cnv = slim.conv2d(input_, curr_features,  [3, 3], stride=2, scope='cnv'+str(i))
-        cnvb = slim.conv2d(cnv, curr_features,  [3, 3], stride=1, scope='cnv'+str(i)+'b')
+        cnv = slim.conv2d(input_, curr_features,  [3, 3], stride=2, scope='cnv'+str(i+1))
+        cnvb = slim.conv2d(cnv, curr_features,  [3, 3], stride=1, scope='cnv'+str(i+1)+'b')
         input_ = cnvb
-        cnv_layers.appand(cnvb)
+        cnv_layers.append(cnvb)
     
     return cnv_layers
 
@@ -59,13 +59,13 @@ def conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=1,max_featur
     input_ = cnv_layers[-1]
 
     decnv_layers = []
-    for i in range(num_encode,1,-1):
+    for i in range(num_encode-1,0,-1):
 
         if num_features*(2**i)>max_features:
             curr_features = max_features
         elif num_features*(2**i)<min_features:
             curr_features = min_features
-        else
+        else:
             curr_features = num_features*(2**i)            
 
         upcnv = slim.conv2d_transpose(input_, curr_features, [3, 3], stride=2, scope='upcnv'+str(i+1))
@@ -73,14 +73,13 @@ def conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=1,max_featur
         i_in  = tf.concat([upcnv, cnv_layers[i-1]], axis=3)
         icnv  = slim.conv2d(i_in, curr_features, [3, 3], stride=1, scope='icnv'+str(i+1))
         input_ = icnv
-        decnv_layers.appand(icnv)
+        decnv_layers.append(icnv)
 
-
-    upcnv = slim.conv2d_transpose(input_, np.max(min_features,min_features), [3, 3], stride=2, scope='upcnv1')
-    icnv  = slim.conv2d(i_in, np.max(min_features,min_features), [3, 3], stride=1, scope='icnv1')
+    upcnv = slim.conv2d_transpose(input_, np.maximum(num_features,min_features), [3, 3], stride=2, scope='upcnv1')
+    icnv  = slim.conv2d(upcnv, np.maximum(num_features,min_features), [3, 3], stride=1, scope='icnv1')
     disp  = slim.conv2d(icnv, num_out_channel,   [3, 3], stride=1, 
         activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp1')
-    decnv_layers.appand(icnv)
+    decnv_layers.append(icnv)
     
     return disp,decnv_layers
 
@@ -218,9 +217,9 @@ def disp_net_single(tgt_image, num_encode, num_features=32, is_training=True, is
                             outputs_collections=end_points_collection):
             input_ = tgt_image
             cnv_layers = conv_encoder(num_encode,input_,num_features)
-            landmark,decnv_layers = conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=28,min_features=256):
+            landmark,decnv_layers = conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=28,min_features=256)
 
-            return land_mark,decnv_layers[-1]
+            return landmark,decnv_layers[-1]
 
 
 def disp_net_initial(tgt_image, is_training=True, is_reuse=False):
@@ -733,7 +732,7 @@ def disp_net_single_multiscale(tgt_image, is_training=True, is_reuse=False):
 
 
 
-def discriminator(tgt_image, is_training=True, is_reuse=False):
+def discriminator(tgt_image, num_encode, num_features=32, is_training=True, is_reuse=False):
     batch_norm_params = {'is_training': is_training,'decay':0.99}
     H = tgt_image.get_shape()[1].value
     W = tgt_image.get_shape()[2].value
@@ -746,25 +745,12 @@ def discriminator(tgt_image, is_training=True, is_reuse=False):
                             weights_regularizer=slim.l2_regularizer(0.05),
                             activation_fn=tf.nn.relu,
                             outputs_collections=end_points_collection):
-            #import pdb;pdb.set_trace()
-            cnv1  = slim.conv2d(tgt_image, 32,  [7, 7], stride=2, scope='cnv1')
-            #cnv1b = slim.conv2d(cnv1,  32,  [7, 7], stride=1, scope='cnv1b')
-            cnv2  = slim.conv2d(cnv1, 64,  [5, 5], stride=2, scope='cnv2')
-            #cnv2b = slim.conv2d(cnv2,  64,  [5, 5], stride=1, scope='cnv2b')
-            cnv3  = slim.conv2d(cnv2, 128, [3, 3], stride=2, scope='cnv3')
-            #cnv3b = slim.conv2d(cnv3,  128, [3, 3], stride=1, scope='cnv3b')
-            cnv4  = slim.conv2d(cnv3, 256, [3, 3], stride=2, scope='cnv4')
-            #cnv4b = slim.conv2d(cnv4,  256, [3, 3], stride=1, scope='cnv4b')
-            cnv5  = slim.conv2d(cnv4, 512, [3, 3], stride=2, scope='cnv5')
-            #cnv5b = slim.conv2d(cnv5,  512, [3, 3], stride=1, scope='cnv5b')
-            cnv6  = slim.conv2d(cnv5, 512, [3, 3], stride=2, scope='cnv6')
-            #cnv6b = slim.conv2d(cnv6,  512, [3, 3], stride=1, scope='cnv6b')
-            cnv7  = slim.conv2d(cnv6, 512, [3, 3], stride=2, scope='cnv7')
             
-            cnv7_flat = tf.reshape(cnv7, [-1, 2 * 2 * 512])
-            fc = tf.layers.dense(inputs=cnv7_flat, units=1, activation=None)
-
-            return tf.nn.sigmoid(fc)
+            input_ = tgt_image
+            cnv_layers = conv_encoder(num_encode,input_,num_features)            
+            # cnv7_flat = tf.reshape(cnv_layers[-1], [-1, 2 * 2 * 512])
+            # fc = tf.layers.dense(inputs=cnv7_flat, units=1, activation=None)
+            return tf.nn.sigmoid(cnv_layers[-1])
 
 
 def discriminator_bn(tgt_image, is_training=True, is_reuse=False):
