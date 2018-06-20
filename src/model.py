@@ -6,7 +6,7 @@ import numpy as np
 
 
 # Range of disparity/inverse depth values
-DISP_SCALING = 4
+DISP_SCALING = 100.0
 MIN_DISP = 0
 
 def resize_like(inputs, ref):
@@ -78,7 +78,7 @@ def conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=1,max_featur
     upcnv = slim.conv2d_transpose(input_, np.maximum(num_features,min_features), [3, 3], stride=2, scope='upcnv1')
     icnv  = slim.conv2d(upcnv, np.maximum(num_features,min_features), [3, 3], stride=1, scope='icnv1')
     disp  = slim.conv2d(icnv, num_out_channel,   [3, 3], stride=1, 
-        activation_fn=tf.sigmoid, normalizer_fn=None, scope='disp1')
+        activation_fn=None, normalizer_fn=None, scope='disp1')
     decnv_layers.append(icnv)
     
     return disp,decnv_layers

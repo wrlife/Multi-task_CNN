@@ -88,7 +88,7 @@ class DataLoader(object):
             translation = translation / norm
             translation = tf.concat([translation,norm],axis=0)
             
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])/100.0#*5000.0
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
 
 
             visibility.set_shape([28])

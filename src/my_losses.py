@@ -81,7 +81,7 @@ def compute_loss(output,data_dict,FLAGS):
     transformation_loss = 0
 
     depth_weight = 10000
-    landmark_weight = 10000
+    landmark_weight = 1
     vis_weight=10
     translation_weight = 100
     quaternion_weight = 5000
