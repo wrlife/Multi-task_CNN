@@ -35,9 +35,6 @@ class domain_trans:
         with tf.variable_scope("disc_model") as scope:
             disc_real = discriminator(output_src[1],num_encode=4)
             disc_fake = discriminator(output_dom[1],num_encode=4,is_training=True, is_reuse=True)
-
-        import pdb;pdb.set_trace()
-
         #Consturct loss
         gen_loss = -tf.reduce_mean(tf.log(disc_fake))
         disc_loss = -tf.reduce_mean(tf.log(disc_real) + tf.log(1. - disc_fake))

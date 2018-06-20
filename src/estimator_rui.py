@@ -111,7 +111,7 @@ class estimator_rui:
             if self.opt.model=="lastdecode":
                 output = disp_net(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="single":
-                output = disp_net_single(tf.cast(input_ts,tf.float32), num_encode = 5, num_features=32, is_training = is_training, is_reuse = is_reuse)
+                output = disp_net_single(tf.cast(input_ts,tf.float32), self.opt.num_encoders, self.opt.num_features, is_training, is_reuse)
                 #output = disp_net_single(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="pose":
                 output = disp_net_single_pose(tf.cast(input_ts,tf.float32),is_training,is_reuse)

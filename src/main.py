@@ -25,6 +25,8 @@ flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_float("learning_rate2", 0.00001, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_integer("num_scales", 4, "number of scales")
+flags.DEFINE_integer("num_encoders", 5, "number of encoders")
+flags.DEFINE_integer("num_features", 32, "number of starting features")
 flags.DEFINE_integer("batch_size", 2, "The size of of a sample batch")
 flags.DEFINE_integer("img_height", 480, "Image height")
 flags.DEFINE_integer("img_width", 640, "Image width")
@@ -55,13 +57,13 @@ if opt.with_noise:
 if opt.domain_transfer_dir!="None":
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
-opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)
+opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)
 
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 #==========================
 #Define a estimator instance
