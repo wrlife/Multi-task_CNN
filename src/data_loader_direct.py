@@ -12,12 +12,14 @@ class DataLoader(object):
                  batch_size,
                  image_height,
                  image_width,
-                 split):
+                 split,
+                 opt):
         self.dataset_dir=dataset_dir
         self.batch_size=batch_size
         self.image_height=image_height
         self.image_width=image_width
         self.split=split
+        self.opt = opt
 
 
 
@@ -63,7 +65,7 @@ class DataLoader(object):
             # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
             # [mnist.IMAGE_PIXELS].
             image = tf.decode_raw(features['color'], tf.float64)
-            IR = tf.decode_raw(features['IR'], tf.float32)/255.0
+            IR = tf.decode_raw(features['IR'], tf.float32)
             depth = tf.decode_raw(features['depth'], tf.float32)/100.0
             label = tf.decode_raw(features['mask'], tf.uint8)
             quaternion = tf.decode_raw(features['quaternion'], tf.float64)
@@ -72,10 +74,10 @@ class DataLoader(object):
             visibility = tf.decode_raw(features['visibility'], tf.float32)
             matK = tf.decode_raw(features['matK'], tf.float64)
 
-            image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)/255.0
+            image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
             #image = tf.image.rgb_to_grayscale(image)/255.0
 
-            IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
+            IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
             depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
             label = tf.reshape(label,[self.image_height, self.image_width, 1])
             quaternion = tf.cast(tf.reshape(quaternion,[4]),tf.float32)
@@ -86,15 +88,8 @@ class DataLoader(object):
             translation = translation / norm
             translation = tf.concat([translation,norm],axis=0)
             
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])/100.0#*5000.0
 
-            #points2D = tf.reverse(points2D,[2])
-
-            # points2D = tf.transpose(points2D,perm=[1,0])
-            # sp1_gt, sp2_gt = tf.split(points2D, 2, 1)
-            # sp1_gt = sp1_gt/self.image_width
-            # sp2_gt = sp2_gt/self.image_height
-            # points2D = tf.concat([sp1_gt,sp2_gt],axis=1)
 
             visibility.set_shape([28])
             visibility = tf.cast(visibility,tf.float32)
@@ -102,6 +97,10 @@ class DataLoader(object):
 
             # Convert label from a scalar uint8 tensor to an int32 scalar.
             label = tf.cast(label, tf.float32)/255.0
+
+            if self.opt.with_noise:
+                IR = IR + tf.random_normal(shape=tf.shape(IR), mean=0.0, stddev=0.1, dtype=tf.float32)
+                image = image + tf.random_normal(shape=tf.shape(IR), mean=0.0, stddev=0.1, dtype=tf.float32)
 
 
             #Data augmentationmamatK

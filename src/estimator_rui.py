@@ -111,7 +111,8 @@ class estimator_rui:
             if self.opt.model=="lastdecode":
                 output = disp_net(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="single":
-                output = disp_net_single(tf.cast(input_ts,tf.float32),is_training,is_reuse)
+                output = disp_net_single(tf.cast(input_ts,tf.float32), num_encode = 5, num_features=32, is_training, is_reuse)
+                #output = disp_net_single(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="pose":
                 output = disp_net_single_pose(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="multiscale":
@@ -131,16 +132,6 @@ class estimator_rui:
                 input_ts = tf.concat([input_ts,tp_im],axis=3)
                 output = disp_net_single(tf.cast(input_ts,tf.float32))
 
-            # #=======================
-            # #Construct output
-            # #=======================
-            # if self.opt.model == "multiscale":
-            #     pred_landmark = output[1][0]
-            # elif self.opt.model=="hourglass":
-            #     pred_landmark = output[1][1]
-            # else:
-            #     pred_landmark = output[1]
-        
         return output
 
     def parse_output_landmark(self,output):
@@ -152,13 +143,28 @@ class estimator_rui:
         elif self.opt.model=="hourglass":
             pred_landmark = output[1][1]
         else:
-            pred_landmark = output[1]
+            pred_landmark = output[0]
         return pred_landmark
 
-    def construct_summary(self,losses,data_dict,pred_landmark):
+    def parse_output_segment(self,output):
+        #=======================
+        #Construct output
+        #=======================
+        if self.opt.model == "multiscale":
+            pred = output[0][0]
+        elif self.opt.model=="hourglass":
+            pred = output[0][1]
+        else:
+            pred = output[0]
+        return pred
+
+    def construct_summary(self,losses,data_dict,input_visual):
         '''
         Create summary for tensorboard visualization
         '''
+
+        pred_landmark = self.parse_output_landmark(input_visual)
+        
         total_loss = tf.summary.scalar('losses/total_loss', losses[0])
         seg_loss = tf.summary.scalar('losses/seg_loss', losses[1])
         landmark_loss = tf.summary.scalar('losses/landmark_loss', losses[2])
@@ -168,6 +174,7 @@ class estimator_rui:
                             data_dict['image'])
 
         if self.opt.with_seg:
+            pred = self.parse_output_segment(input_visual)
             tf.summary.image('gt_label' , \
                                 data_dict['label'])
             tf.summary.image('pred_label' , \
@@ -192,7 +199,8 @@ class estimator_rui:
                                     5,
                                     self.opt.img_height, 
                                     self.opt.img_width,
-                                    'train')
+                                    'train',
+                                    self.opt)
         # Load training data
         if test_input:
             data_dict = imageloader.inputs_test(self.opt.batch_size,num_epochs,with_dataaug)

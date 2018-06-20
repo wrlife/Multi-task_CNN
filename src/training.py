@@ -10,14 +10,14 @@ from estimator_rui import *
 
 def training(opt,m_trainer,losses,losses_eval,
              data_dict,data_dict_eval,
-             pred_landmark,pred_landmark_eval,train_adv):
+             output,output_eval,train_adv):
 
     #Summaries
     share_loss = tf.placeholder(tf.bool, shape=())
     inputloss = tf.cond(share_loss, lambda: losses, lambda: losses_eval)
-    input_landmark = tf.cond(share_loss, lambda: pred_landmark, lambda: pred_landmark_eval)
+    input_visual = tf.cond(share_loss, lambda: output, lambda: output_eval)
     input_data = tf.cond(share_loss, lambda: data_dict, lambda: data_dict_eval)
-    m_trainer.construct_summary(inputloss,input_data,input_landmark)
+    m_trainer.construct_summary(inputloss,input_data,input_visual)
 
     with tf.name_scope("train_op"):
 

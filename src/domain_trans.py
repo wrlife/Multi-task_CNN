@@ -23,7 +23,7 @@ class domain_trans:
         Generate dataloader, model, loss and its own summary
         '''
 
-        weight_gen = 1000
+        weight_gen = 5000
         weight_disc = 1000
 
         _, output_dom, data_dict_dom = self.trainer.forward_wrapper(domain_transfer_dir,scope_name,is_training=True,is_reuse=True,with_loss=False,test_input=True)
@@ -33,8 +33,8 @@ class domain_trans:
         #=========================
 
         with tf.variable_scope("disc_model") as scope:
-            disc_real = discriminator(output_src[2])
-            disc_fake = discriminator(output_dom[2],is_training=True, is_reuse=True)
+            disc_real = discriminator(output_src[1])
+            disc_fake = discriminator(output_dom[1],is_training=True, is_reuse=True)
 
         #Consturct loss
         gen_loss = -tf.reduce_mean(tf.log(disc_fake))*weight_gen

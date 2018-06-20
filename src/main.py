@@ -22,8 +22,9 @@ flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("domain_transfer_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
-flags.DEFINE_float("learning_rate2", 0.00002, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate2", 0.00001, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
+flags.DEFINE_integer("num_scales", 4, "number of scales")
 flags.DEFINE_integer("batch_size", 2, "The size of of a sample batch")
 flags.DEFINE_integer("img_height", 480, "Image height")
 flags.DEFINE_integer("img_width", 640, "Image width")
@@ -38,14 +39,19 @@ flags.DEFINE_boolean("data_aug", False, "Data augment")
 flags.DEFINE_boolean("with_seg", False, "with seg")
 flags.DEFINE_boolean("with_pose", False, "with pose estimation")
 flags.DEFINE_boolean("training", True, "if False, start prediction")
+flags.DEFINE_boolean("with_noise", False, "if False, start prediction")
 
 opt = flags.FLAGS
 
 opt.checkpoint_dir="./checkpoints/"+opt.inputs+"_"+opt.model
+if opt.with_seg:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_seg"
 if opt.data_aug:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dataaug"
 if opt.with_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
+if opt.with_noise:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_noise"
 if opt.domain_transfer_dir!="None":
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
@@ -55,7 +61,7 @@ if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 #==========================
 #Define a estimator instance
@@ -76,6 +82,7 @@ losses, output, data_dict = m_trainer.forward_wrapper(
                                            scope_name,
                                            opt.max_steps,
                                            with_dataaug=True)
+losses = list(losses)
 
 
 #==========================
@@ -114,7 +121,7 @@ if opt.domain_transfer_dir != "None":
                                             opt.domain_transfer_dir,
                                             scope_name,
                                             output)
-    losses = list(losses)
+    
     losses[0] = losses[0]+gen_loss
 else:
     train_adv=0
@@ -123,17 +130,16 @@ else:
 #==========================
 #Start training
 #==========================
-pred_landmark = m_trainer.parse_output_landmark(output)
-pred_landmark_eval = m_trainer.parse_output_landmark(output_eval)
 
 training(
     opt,
     m_trainer,
     losses,
-    losses_eval,data_dict, 
+    losses_eval,
+    data_dict, 
     data_dict_eval,
-    pred_landmark, 
-    pred_landmark_eval,
+    output, 
+    output_eval,
     train_adv)
 
 
