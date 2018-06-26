@@ -103,7 +103,7 @@ class estimator_rui:
         return input_ts
 
 
-    def construct_model(self, input_ts,is_training=True, is_reuse=False,scope_name="default"):
+    def construct_model(self, input_ts,is_training=True, num_out_channel=28, is_reuse=False,scope_name="default"):
         '''
         Model selection
         '''
@@ -111,7 +111,14 @@ class estimator_rui:
             if self.opt.model=="lastdecode":
                 output = disp_net(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="single":
-                output = disp_net_single(tf.cast(input_ts,tf.float32), self.opt.num_encoders, self.opt.num_features, is_training, is_reuse)
+                output = disp_net_single(tf.cast(input_ts,tf.float32), 
+                                         self.opt.num_encoders, 
+                                         self.opt.num_features, 
+                                         is_training=is_training, 
+                                         is_reuse=is_reuse,
+                                         with_vis = self.opt.with_vis,
+                                         num_out_channel=num_out_channel,
+                                         with_seg = self.opt.with_seg)
                 #output = disp_net_single(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="pose":
                 output = disp_net_single_pose(tf.cast(input_ts,tf.float32),is_training,is_reuse)
@@ -155,45 +162,50 @@ class estimator_rui:
         elif self.opt.model=="hourglass":
             pred = output[0][1]
         else:
-            pred = output[0]
+            pred = output[1]
         return pred
 
-    def construct_summary(self,losses,data_dict,input_visual):
+    def construct_summary(self,data_dict,input_visual,losses=None):
         '''
         Create summary for tensorboard visualization
         '''
 
         pred_landmark = self.parse_output_landmark(input_visual)
         
-        total_loss = tf.summary.scalar('losses/total_loss', losses[0])
-        seg_loss = tf.summary.scalar('losses/seg_loss', losses[1])
-        landmark_loss = tf.summary.scalar('losses/landmark_loss', losses[2])
-        transformation_loss = tf.summary.scalar('losses/transformation_loss', losses[3])
-        vis_loss = tf.summary.scalar('losses/vis_loss', losses[4])
+        if losses!=None:
+            total_loss = tf.summary.scalar('losses/total_loss', losses[0])
+            seg_loss = tf.summary.scalar('losses/seg_loss', losses[1])
+            landmark_loss = tf.summary.scalar('losses/landmark_loss', losses[2])
+            transformation_loss = tf.summary.scalar('losses/transformation_loss', losses[4])
+            vis_loss = tf.summary.scalar('losses/vis_loss', losses[3])
+
         image = tf.summary.image('image' , \
                             data_dict['image'])
 
+        
         if self.opt.with_seg:
             pred = self.parse_output_segment(input_visual)
             tf.summary.image('gt_label' , \
                                 data_dict['label'])
             tf.summary.image('pred_label' , \
-                                pred[0])
-                            
-        # random_landmark = tf.placeholder(tf.int32)
-        gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)#tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#
+                                pred)
+
+        if "points2D" in data_dict:                    
+            gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)#tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#
+            landmark_sum = tf.summary.image('gt_lm_img' , \
+                                gt_landmark)
+
         pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
-        landmark_sum = tf.summary.image('gt_lm_img' , \
-                            gt_landmark)
         pred_landmark_sum = tf.summary.image('pred_lm_img' , \
                             pred_landmark)
         #return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image,landmark_sum,pred_landmark_sum]) #
 
         
-    def forward_wrapper(self,dataset_dir,scope_name=None,num_epochs=None,is_training=True, is_reuse=False,with_loss=True,with_dataaug=False,test_input=False):
+    def forward_wrapper(self,dataset_dir,scope_name=None,num_epochs=None,is_training=True, is_reuse=False,with_loss=True,with_dataaug=False,test_input=False, network_type="landmark"):
         '''
         A wrapper function which create a dataloader, construct a network model and compute loss
         '''
+
         #Initialize data loader
         imageloader = DataLoader(dataset_dir, 
                                     5,
@@ -211,7 +223,18 @@ class estimator_rui:
         input_ts = self.construct_input(data_dict)
 
         #Select model accordingly
-        output = self.construct_model(input_ts,is_training, is_reuse,scope_name)
+        #import pdb;pdb.set_trace()
+        if self.opt.with_noise:
+            input_ts_in = input_ts + tf.random_normal(shape=tf.shape(input_ts), mean=0.0, stddev=0.1, dtype=tf.float32)*0.5
+        else:
+            input_ts_in = input_ts
+
+        if network_type=="landmark":
+            num_out_channel = data_dict['points2D'].get_shape()[3].value
+        else:
+            num_out_channel = input_ts_in.get_shape()[3].value
+
+        output = self.construct_model(input_ts_in,is_training=is_training, is_reuse=is_reuse,scope_name=scope_name,num_out_channel=num_out_channel)
 
         #Compute loss accordingly
         if with_loss:
@@ -219,9 +242,31 @@ class estimator_rui:
         else:
             losses = 0
 
-        return losses, output, data_dict
+        return losses, output, data_dict,input_ts
         
 
+    def input_wrapper(self,dataset_dir,scope_name=None,num_epochs=None,is_training=True, is_reuse=False,with_loss=True,with_dataaug=False,test_input=False,num_out_channel=28):
+        '''
+        A wrapper function which create a dataloader, construct a network model and compute loss
+        '''
+
+        #Initialize data loader
+        imageloader = DataLoader(dataset_dir, 
+                                    5,
+                                    self.opt.img_height, 
+                                    self.opt.img_width,
+                                    'train',
+                                    self.opt)
+        # Load training data
+        if test_input:
+            data_dict = imageloader.inputs_test(self.opt.batch_size,num_epochs,with_dataaug)
+        else:
+            data_dict = imageloader.inputs(self.opt.batch_size,num_epochs,with_dataaug)  # batch_size, num_epochs
+
+        #Construct input accordingly
+        input_ts = self.construct_input(data_dict)
+
+        return input_ts
 
 def write_params(opt):
     params = open(opt.checkpoint_dir+"/params.txt","w")

@@ -68,8 +68,8 @@ def compute_loss(output,data_dict,FLAGS):
         pre_landmark_init = output[0][1]
         pred_landmark = output[1][1]
     else:
-        pred = output[0]
         pred_landmark = output[0]
+        pred_seg = output[1]
 
     #=======
     #Depth loss
@@ -78,7 +78,7 @@ def compute_loss(output,data_dict,FLAGS):
     depth_loss = 0
     landmark_loss = 0
     vis_loss = 0
-    transformation_loss = 0
+    geo_loss = 0
 
     depth_weight = 10000
     landmark_weight = 1
@@ -98,11 +98,12 @@ def compute_loss(output,data_dict,FLAGS):
     
     if FLAGS.with_seg:
         #Segmentation loss
-        for s in range(FLAGS.num_scales):
-            curr_label = tf.image.resize_area(label_batch, 
-                [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
-            depth_loss+=l2loss(curr_label,pred[s])/(2**s)
-        depth_loss = depth_weight*depth_loss
+        # for s in range(FLAGS.num_scales):
+        #     curr_label = tf.image.resize_area(label_batch, 
+        #         [int(FLAGS.img_height/(2**s)), int(FLAGS.img_width/(2**s))])
+        #     depth_loss+=l2loss(curr_label,pred[s])/(2**s)
+        
+        depth_loss = depth_weight*l2loss(label_batch,pred_seg)
 
     if FLAGS.model=="pose":
         quat_est = tfq.Quaternion(pose[:,0:4])
@@ -155,11 +156,58 @@ def compute_loss(output,data_dict,FLAGS):
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
     
 
+    #Geometric loss
+    if FLAGS.with_geo:
+        geo_loss,gt_landmarkdist = geometric_loss(pred_landmark,landmark,depth,visibility,data_dict["matK"])
+
+    if FLAGS.with_vis:
+        vis_loss = compute_vis_loss(visibility,output[2])
+
+    total_loss = depth_loss+landmark_loss+vis_loss+geo_loss
+
+    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss#,gt_landmarkdist
 
 
-    total_loss = depth_loss+landmark_loss+vis_loss+transformation_loss
+def geometric_loss(pred_landmark,landmark,depth,visibility,matK):
 
-    return total_loss,depth_loss,landmark_loss,vis_loss,transformation_loss
+        #Get gt and estimate landmark locations
+        pred_lm_coord = tf.reverse(argmax_2d(pred_landmark),[1])
+        gt_lm_coord = tf.reverse(argmax_2d(landmark),[1])
+        
+        #import pdb;pdb.set_trace()
+
+        batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(pred_landmark)[0]), 1), [1, tf.shape(pred_landmark)[3]])
+        index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(gt_lm_coord,[1]),[0,2,1])], axis=2)
+        index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(pred_lm_coord,[1]),[0,2,1])], axis=2)
+
+
+        gt_depth_val = tf.gather_nd(depth[:,:,:,0],index_gt)
+        pred_depth_val = tf.gather_nd(depth[:,:,:,0],index_pred)
+        
+        ones = tf.ones([tf.shape(pred_landmark)[0], 1, tf.shape(pred_landmark)[3]])
+        pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
+        gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
+
+        gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,matK)
+        pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,matK)
+
+        #import pdb;pdb.set_trace()
+        gt_cam_coord_shift = tf.concat([tf.expand_dims(gt_cam_coord[:,:,-1],axis=2),gt_cam_coord[:,:,0:-1]],axis=2)
+        pred_cam_coord_shift = tf.concat([tf.expand_dims(pred_cam_coord[:,:,-1],axis=2),pred_cam_coord[:,:,0:-1]],axis=2)
+
+        lm3d_weights = tf.clip_by_value(visibility,0.0,1.5)
+        lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
+
+        gt_landmarkdist = tf.sqrt(tf.reduce_sum((gt_cam_coord-gt_cam_coord_shift)**2,axis=1))
+        pred_landmarkdist = tf.sqrt(tf.reduce_sum((pred_cam_coord-pred_cam_coord_shift)**2,axis=1))
+        geoloss = l2loss(gt_landmarkdist,pred_landmarkdist,lm3d_weights)
+
+
+        return geoloss,gt_landmarkdist
+
+def compute_vis_loss(visibility,pred_visibility):
+    vis_loss = l2loss(visibility,pred_visibility)
+    return vis_loss
 
 
 

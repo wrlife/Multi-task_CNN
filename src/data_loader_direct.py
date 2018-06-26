@@ -66,7 +66,7 @@ class DataLoader(object):
             # [mnist.IMAGE_PIXELS].
             image = tf.decode_raw(features['color'], tf.float64)
             IR = tf.decode_raw(features['IR'], tf.float32)
-            depth = tf.decode_raw(features['depth'], tf.float32)/100.0
+            depth = tf.decode_raw(features['depth'], tf.float32)#/100.0
             label = tf.decode_raw(features['mask'], tf.uint8)
             quaternion = tf.decode_raw(features['quaternion'], tf.float64)
             translation = tf.decode_raw(features['translation'], tf.float64)
@@ -77,7 +77,11 @@ class DataLoader(object):
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
             #image = tf.image.rgb_to_grayscale(image)/255.0
 
+
             IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
+            
+            IR = tf.expand_dims(IR[:,:,0],axis=2)
+
             depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
             label = tf.reshape(label,[self.image_height, self.image_width, 1])
             quaternion = tf.cast(tf.reshape(quaternion,[4]),tf.float32)
@@ -91,6 +95,11 @@ class DataLoader(object):
             points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
 
 
+            if self.opt.downsample:
+                image = tf.image.resize_images(image,[224,224])
+                IR = tf.image.resize_images(IR,[224,224])
+
+
             visibility.set_shape([28])
             visibility = tf.cast(visibility,tf.float32)
             matK = tf.cast(tf.reshape(matK,[3,3]),tf.float32)
@@ -98,9 +107,6 @@ class DataLoader(object):
             # Convert label from a scalar uint8 tensor to an int32 scalar.
             label = tf.cast(label, tf.float32)/255.0
 
-            if self.opt.with_noise:
-                IR = IR + tf.random_normal(shape=tf.shape(IR), mean=0.0, stddev=0.1, dtype=tf.float32)
-                image = image + tf.random_normal(shape=tf.shape(IR), mean=0.0, stddev=0.1, dtype=tf.float32)
 
 
             #Data augmentationmamatK
@@ -119,7 +125,15 @@ class DataLoader(object):
 
         def augment(data_dict):
         
-            ir_batch, image_batch, depth_batch, label_batch,landmark_batch = self.data_augmentation(data_dict['IR'], data_dict['image'], data_dict['depth'],data_dict['label'], data_dict['points2D'],224,224)
+            ir_batch, image_batch, depth_batch, label_batch,landmark_batch = self.data_augmentation(
+                                                                                    data_dict['IR'], 
+                                                                                    data_dict['image'], 
+                                                                                    data_dict['depth'],
+                                                                                    data_dict['label'], 
+                                                                                    data_dict['points2D'],
+                                                                                    self.image_height,
+                                                                                    self.image_width,
+                                                                                    with_aug)
             data_dict['image'] = image_batch
             data_dict['depth'] = depth_batch
             data_dict['label'] = label_batch
@@ -151,8 +165,8 @@ class DataLoader(object):
             dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
-            if with_aug:
-                dataset = dataset.map(augment)
+            #if with_aug is not None:
+            dataset = dataset.map(augment)
 
             iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()
@@ -194,15 +208,21 @@ class DataLoader(object):
             # Convert from a scalar string tensor (whose single string has
             # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
             # [mnist.IMAGE_PIXELS].
-            image = tf.decode_raw(features['color'], tf.float64)/255.0
-            IR = tf.decode_raw(features['IR'], tf.float64)/255.0
-            depth = tf.decode_raw(features['depth'], tf.float64)/100.0
+            image = tf.decode_raw(features['color'], tf.float64)/255.0-0.5
+            IR = tf.decode_raw(features['IR'], tf.float32)/255.0-0.5
+            
+            depth = tf.decode_raw(features['depth'], tf.float32)#/100.0
             matK = tf.decode_raw(features['matK'], tf.float64)
 
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)
             IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)
+            IR = tf.expand_dims(IR[:,:,0],axis=2)
             depth = tf.cast(tf.reshape(depth,[self.image_height, self.image_width, 1]),tf.float32)
             matK = tf.cast(tf.reshape(matK,[3,3]),tf.float32)
+
+            if self.opt.downsample:
+                image = tf.image.resize_images(image,[224,224])
+                IR = tf.image.resize_images(IR,[224,224])
 
             #Data augmentationmamatK
             data_dict = {}
@@ -370,7 +390,7 @@ class DataLoader(object):
         return image, depth, label
 
 
-    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w):
+    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w,with_aug):
 
         def _random_true_false():
             prob = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
@@ -434,36 +454,45 @@ class DataLoader(object):
 
         def random_color(image):
 
-            color_ordering = np.random.randint(4, size = 1)
-            if color_ordering == 0:
-                image = tf.image.random_brightness(image, max_delta=32. / 255.)
-                image = tf.image.random_saturation(image, lower=0.5, upper=1.5)
-                image = tf.image.random_hue(image, max_delta=0.2)
-                image = tf.image.random_contrast(image, lower=0.5, upper=1.5)
-            elif color_ordering == 1:
-                image = tf.image.random_saturation(image, lower=0.5, upper=1.5)
-                image = tf.image.random_brightness(image, max_delta=32. / 255.)
-                image = tf.image.random_contrast(image, lower=0.5, upper=1.5)
-                image = tf.image.random_hue(image, max_delta=0.2)
-            elif color_ordering == 2:
-                image = tf.image.random_contrast(image, lower=0.5, upper=1.5)
-                image = tf.image.random_hue(image, max_delta=0.2)
-                image = tf.image.random_brightness(image, max_delta=32. / 255.)
-                image = tf.image.random_saturation(image, lower=0.5, upper=1.5)
-            elif color_ordering == 3:
-                image = tf.image.random_hue(image, max_delta=0.2)
-                image = tf.image.random_saturation(image, lower=0.5, upper=1.5)
-                image = tf.image.random_contrast(image, lower=0.5, upper=1.5)
-                image = tf.image.random_brightness(image, max_delta=32. / 255.)   
+            color_ordering = scaling = tf.random_uniform([1], 0, 4,dtype=tf.int32)
+            
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image) 
+  
 
             return image     
 
-        # ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
-        # ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
-        ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
-        #image = random_color(image)
+        def do_color(ir, image, depth, label,landmark):
+            image = random_color(image)
+            return ir, image, depth, label,landmark
 
-        return ir, image, depth, label,landmark
+        def do_all(ir, image, depth, label,landmark):
+            ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
+            ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
+            ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
+            image = random_color(image)
+            return ir, image, depth, label,landmark
+
+        return tf.cond(tf.equal(with_aug, tf.constant(True)),lambda:do_all(ir, image, depth, label,landmark),lambda:do_color(ir, image, depth, label,landmark))    
+
+        #return ir, image, depth, label,landmark
 
         
 

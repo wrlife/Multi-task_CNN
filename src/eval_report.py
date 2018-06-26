@@ -50,7 +50,9 @@ def evaluation(inputs,model,checkpoint_dir,with_seg,worksheet,row, method,thresh
     if model=="lastdecode":
         pred, pred_landmark,_, _ = disp_net(tf.cast(input_ts,tf.float32), is_training = False)
     elif model=="single":
-        pred, pred_landmark,_, _ = disp_net_single(tf.cast(input_ts,tf.float32), is_training = False)
+        #pred_landmark,_= disp_net_single(tf.cast(input_ts,tf.float32), is_training = False)
+        pred_landmark,_ = disp_net_single(tf.cast(input_ts,tf.float32), 5, 32, False)
+        pred = pred_landmark
     elif model=="pose":
         pred, pred_landmark, pose, _ = disp_net_single_pose(tf.cast(input_ts,tf.float32))
     elif model=="multiscale":
@@ -180,7 +182,7 @@ def evaluation(inputs,model,checkpoint_dir,with_seg,worksheet,row, method,thresh
                 
     
                 for tt in range(28):
-                    #import pdb;pdb.set_trace()
+                    import pdb;pdb.set_trace()
                     ind = get_lanmark_loc_from_hm(results["pred_landmark"][0,:,:,tt],thresh)
                     
                     points2D[0,tt]=ind[1]
@@ -325,7 +327,7 @@ for thresh in range(2000,20001,2000):
     worksheet.write('I1', 'points_per_frame', bold)
     
     row = 1
-    evaluation("all","single","/home/z003xr2y/data/Multi-task_CNN/checkpoints/checkpoints_all_dataaug_cropflip_single_hr/",False,worksheet,row,"all+dataaug",thresh)
+    evaluation("IR","single","/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single_dataaug/lr1_0.0002_lr2_1e-05_numEncode5_numFeatures32/",False,worksheet,row,"IR+dataaug",thresh)
     #evaluation("all","single","/home/z003xr2y/data/Multi-task_CNN/checkpoints_all_single_hr/",False,worksheet,row+1,"all",thresh)
     
     

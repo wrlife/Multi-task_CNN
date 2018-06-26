@@ -114,7 +114,7 @@ with tf.Session() as sess:
             points2D = np.zeros([2,28],dtype=np.float32)
 
             for tt in range(28):
-                #import pdb;pdb.set_trace()
+                import pdb;pdb.set_trace()
                 ind = get_lanmark_loc_from_hm(results["pred_landmark"][0,:,:,tt])
                 points2D[0,tt]=ind[1]
                 points2D[1,tt]=ind[0]

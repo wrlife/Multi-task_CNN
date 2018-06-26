@@ -12,6 +12,9 @@ from estimator_rui import *
 from domain_trans import *
 from pose_estimate import *
 from training import *
+from evaluate import *
+from prediction import *
+from cyclegan_training import *
 
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -21,13 +24,14 @@ flags.DEFINE_string("dataset_dir", "/home/z003xr2y/data/data/tfrecords_hr_fillde
 flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("domain_transfer_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
+flags.DEFINE_string("init_checkpoint_file", None, "Directory name to save the checkpoints")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
-flags.DEFINE_float("learning_rate2", 0.00001, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate2", 0.001, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_integer("num_scales", 4, "number of scales")
 flags.DEFINE_integer("num_encoders", 5, "number of encoders")
 flags.DEFINE_integer("num_features", 32, "number of starting features")
-flags.DEFINE_integer("batch_size", 2, "The size of of a sample batch")
+flags.DEFINE_integer("batch_size", 5, "The size of of a sample batch")
 flags.DEFINE_integer("img_height", 480, "Image height")
 flags.DEFINE_integer("img_width", 640, "Image width")
 flags.DEFINE_integer("max_steps", 120, "Maximum number of training iterations")
@@ -37,11 +41,19 @@ flags.DEFINE_integer("save_latest_freq", 1000, \
 flags.DEFINE_boolean("continue_train", False, "Continue training from previous checkpoint")
 flags.DEFINE_string("inputs", "all", "all IR_depth depth_color IR_color IR color depth")
 flags.DEFINE_string("model", "lastdecode", "lastdecode sinlge")
+flags.DEFINE_boolean("downsample", False, "Data augment")
 flags.DEFINE_boolean("data_aug", False, "Data augment")
 flags.DEFINE_boolean("with_seg", False, "with seg")
 flags.DEFINE_boolean("with_pose", False, "with pose estimation")
-flags.DEFINE_boolean("training", True, "if False, start prediction")
 flags.DEFINE_boolean("with_noise", False, "if False, start prediction")
+flags.DEFINE_boolean("with_geo", False, "with geometry estimation")
+flags.DEFINE_boolean("with_dom", False, "with domain transform")
+flags.DEFINE_boolean("with_vis", False, "with visibility loss")
+flags.DEFINE_boolean("training", True, "if False, start prediction")
+flags.DEFINE_boolean("evaluation", False, "if False, start prediction")
+flags.DEFINE_boolean("prediction", False, "if False, start prediction")
+flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
+
 
 opt = flags.FLAGS
 
@@ -54,16 +66,16 @@ if opt.with_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
 if opt.with_noise:
     opt.checkpoint_dir = opt.checkpoint_dir+"_noise"
-if opt.domain_transfer_dir!="None":
+if opt.domain_transfer_dir!="None" and opt.with_dom:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
 opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)
-
+#import pdb;pdb.set_trace()
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-#os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -74,17 +86,27 @@ scope_name="DBNet"
 m_trainer = estimator_rui(opt,scope_name)
 
 
-
 #==========================
 #Forward path for training
 # /testing data
 #==========================
-losses, output, data_dict = m_trainer.forward_wrapper(
-                                           opt.dataset_dir,
-                                           scope_name,
-                                           opt.max_steps,
-                                           with_dataaug=True)
-losses = list(losses)
+global_step = tf.Variable(0,
+                            name = 'global_step',
+                            trainable = False)
+incr_global_step = tf.assign(global_step,global_step+1)
+
+if opt.with_pose:
+    dataaug = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),lambda : opt.data_aug, lambda:False)
+else:
+    dataaug = tf.constant(opt.data_aug)
+#import pdb;pdb.set_trace()
+if opt.training:
+    losses, output, data_dict,_ = m_trainer.forward_wrapper(
+                                            opt.dataset_dir,
+                                            scope_name,
+                                            opt.max_steps,
+                                            with_dataaug=dataaug)
+    losses = list(losses)
 
 
 #==========================
@@ -92,12 +114,29 @@ losses = list(losses)
 # estimation
 #==========================
 if opt.with_pose:
-    m_pose_est = pose_estimate(m_trainer)
-    pose_loss = m_pose_est.forward_wrapper(
-                                            output,
-                                            data_dict)
-    losses = list(losses)
+    def est_pose(est,m_trainer,output,data_dict):
+        if est:
+            m_pose_est = pose_estimate(m_trainer)
+            pose_loss,coord_pair = m_pose_est.forward_wrapper(
+                                                    output,
+                                                    data_dict)
+            return pose_loss
+        else:
+            return 0.0     
+
+    pose_loss = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),lambda : est_pose(opt.with_pose,m_trainer,output,data_dict), lambda:est_pose(False,m_trainer,output,data_dict))
     losses[0] = losses[0]+pose_loss
+# else:
+
+# # if opt.with_pose:
+# #     m_pose_est = pose_estimate(m_trainer)
+# #     pose_loss,coord_pair = m_pose_est.forward_wrapper(
+# #                                             output,
+# #                                             data_dict)
+# #     losses = list(losses)
+# 
+# # else:
+# coord_pair=0
 
 
 #==========================
@@ -105,47 +144,131 @@ if opt.with_pose:
 #During testing, just set None
 #==========================
 if opt.evaluation_dir != "None":
-    losses_eval, output_eval, data_dict_eval = m_trainer.forward_wrapper(
+    losses_eval, output_eval, data_dict_eval,_ = m_trainer.forward_wrapper(
                                                                         opt.evaluation_dir,
                                                                         scope_name,
-                                                                        is_training=False,
-                                                                        is_reuse=True)
+                                                                        opt.max_steps,
+                                                                        is_training=True,
+                                                                        is_reuse=opt.training)
     losses_eval = list(losses_eval)
+else:
+    losses_eval=0
+    data_dict_eval=0
+    output_eval=0
 
 
 #==========================
 #Forward path for domain transfer
 #Set to None during testing
 #==========================
-if opt.domain_transfer_dir != "None":
-    m_domain_tans = domain_trans(m_trainer)
-    gen_loss, disc_loss, train_adv = m_domain_tans.forward_wrapper(
-                                            opt.domain_transfer_dir,
-                                            scope_name,
-                                            output)
+#import pdb;pdb.set_trace()
+if opt.domain_transfer_dir != "None" and opt.with_dom:
     
-    losses[0] = losses[0]+gen_loss
+    #Forward mapping
+    _, output_fix, data_dict_fix,input_fix = m_trainer.forward_wrapper(
+                                                            opt.dataset_dir,
+                                                            scope_name,
+                                                            opt.max_steps,
+                                                            is_training=True,
+                                                            is_reuse=False,
+                                                            with_loss=False,
+                                                            network_type="G")
+
+
+    #Backward mapping
+    _, output_bw, data_dict_bw,input_bw = m_trainer.forward_wrapper(
+                                                            opt.domain_transfer_dir,
+                                                            scope_name+"_bw",
+                                                            opt.max_steps,
+                                                            is_training=True,
+                                                            is_reuse=False,
+                                                            with_loss=False,
+                                                            test_input=True,
+                                                            network_type="G")
+
+    m_domain_tans = domain_trans(m_trainer)
+    gen_loss,disc_loss,gen_loss_bw,disc_loss_bw = m_domain_tans.forward_wrapper(
+                                            scope_name,
+                                            output_fix[0],
+                                            data_dict_fix,
+                                            input_fix,
+                                            output_bw[0],
+                                            data_dict_bw,
+                                            input_bw)
+
+    data_dict = data_dict_fix
+    output = output_fix
+    #losses[0] = gen_loss#losses[0]+gen_loss
 else:
     train_adv=0
+
+    
+#==========================
+#Forward path
+#==========================
+
+if opt.prediction:
+    
+    _, output_dom, data_dict_dom = m_trainer.forward_wrapper(
+                                                            opt.domain_transfer_dir,
+                                                            scope_name,
+                                                            opt.max_steps,
+                                                            is_training=False,
+                                                            is_reuse=False,
+                                                            with_loss=False,
+                                                            test_input=True)
 
 
 #==========================
 #Start training
 #==========================
+if opt.training:
+    training(
+        opt,
+        m_trainer,
+        losses,
+        losses_eval,
+        data_dict, 
+        data_dict_eval,
+        output, 
+        output_eval,
+        global_step,
+        incr_global_step
+        )
 
-training(
-    opt,
-    m_trainer,
-    losses,
-    losses_eval,
-    data_dict, 
-    data_dict_eval,
-    output, 
-    output_eval,
-    train_adv)
-
+#==========================
+#Start evaluation
+#==========================
+elif opt.evaluation:
+    evaluate(
+        opt,
+        m_trainer,
+        losses_eval,
+        data_dict_eval,
+        output_eval)
 
 
 #==========================
 #Start Prediction
 #==========================
+elif opt.prediction:
+    prediction(
+        opt,
+        m_trainer,
+        data_dict_dom,
+        output_dom        
+    )
+
+
+#==========================
+#Start training cycle GAN
+#==========================
+elif opt.cycleGAN:
+    cycleGAN_training(
+        opt,
+        m_trainer,
+        gen_loss,
+        disc_loss,
+        gen_loss_bw,
+        disc_loss_bw
+        )
