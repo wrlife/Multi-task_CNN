@@ -66,6 +66,10 @@ if opt.with_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
 if opt.with_noise:
     opt.checkpoint_dir = opt.checkpoint_dir+"_noise"
+if opt.with_vis:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_vis"
+if opt.with_geo:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_geo"
 if opt.domain_transfer_dir!="None" and opt.with_dom:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
@@ -75,7 +79,7 @@ if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -113,13 +117,15 @@ if opt.training:
     # estimation
     #==========================
     if opt.with_pose:
-        def est_pose(est,m_trainer,output,data_dict):
+        def est_pose(est,m_trainer,output,data_dict,is_training=True, is_reuse=False):
             #
             #import pdb;pdb.set_trace()
             m_pose_est = pose_estimate(m_trainer)
             pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                     output,
-                                                    data_dict)
+                                                    data_dict,
+                                                    is_training,
+                                                    is_reuse)
             if est:
                 return pose_loss
             else:
@@ -151,7 +157,9 @@ if opt.evaluation_dir != "None":
     #==========================
     # import pdb;pdb.set_trace()
     if opt.with_pose:
-        pose_loss_eval = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),lambda : est_pose(False,m_trainer,output_eval, data_dict_eval), lambda:est_pose(opt.with_pose,m_trainer,output_eval, data_dict_eval))
+        pose_loss_eval = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),
+                                lambda : est_pose(False,m_trainer,output_eval, data_dict_eval,is_reuse=opt.training), 
+                                lambda : est_pose(opt.with_pose,m_trainer,output_eval, data_dict_eval,is_reuse=opt.training))
         losses_eval[0] = losses_eval[0]+pose_loss_eval
         losses_eval[4] = pose_loss_eval
 

@@ -55,7 +55,7 @@ class pose_estimate:
 
         return R, t,R_det
     
-    def forward_wrapper(self,output,data_dict):
+    def forward_wrapper(self,output,data_dict,is_training=True, is_reuse=False):
         '''
         A wrapper function for domain transfer.
         Generate dataloader, model, loss and its own summary
@@ -65,8 +65,8 @@ class pose_estimate:
 
         depth1 = tf.expand_dims(data_dict["depth"][0,:,:,:],axis=0)
         depth2 = tf.expand_dims(data_dict["depth"][1,:,:,:],axis=0)
-
-        input_pose = tf.concat([landmark1,depth1,landmark2,depth2],axis=3)
+        
+        #input_pose = tf.concat([landmark1,depth1,landmark2,depth2],axis=3)
 
         # pose_final = disp_net_pose(tf.cast(input_pose,tf.float32))
         # quat_est = tfq.Quaternion(pose_final[:,0:4])
@@ -84,14 +84,13 @@ class pose_estimate:
         # translation2 = tf.expand_dims(data_dict['translation'][0,:],axis=0)
 
 
-       #Get gt and estimate landmark locations
+        #Get gt and estimate landmark locations
         pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
         gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
-        #import pdb;pdb.set_trace()
+
         batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(landmark1)[3]])
         index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(gt_lm_coord,[1]),[0,2,1])], axis=2)
         index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(pred_lm_coord,[1]),[0,2,1])], axis=2)
-
 
         gt_depth_val = tf.gather_nd(depth1,index_gt)
         pred_depth_val = tf.gather_nd(depth2,index_pred)
@@ -103,9 +102,18 @@ class pose_estimate:
         gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
         pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
 
-        lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
-        lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
+
+        #Visibility
         #import pdb;pdb.set_trace()
+        if self.trainer.opt.with_vis:
+            pred_vis1 = tf.to_float(tf.expand_dims(output[2][0,:],axis=0)>0.5)
+            pred_vis2 = tf.to_float(tf.expand_dims(output[2][1,:],axis=0)>0.5)
+            lm3d_weights = pred_vis1
+            lm3d_weights = lm3d_weights*pred_vis2
+        else:
+            lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
+            lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
+
         vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
         
         batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
@@ -114,21 +122,28 @@ class pose_estimate:
         gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
         pred_vis=tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
 
-        R,T,R_det = self.rigid_transform_3D(pred_vis,gt_vis)
+
+        if self.trainer.opt.with_geo:
+            input_geo = tf.concat([landmark1,landmark2],axis=3)
+            pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training, is_reuse=is_reuse)
+
+            quat_est = tfq.Quaternion(pred_pose[:,0:4])
+            R = quat_est.as_rotation_matrix()
+            T = tf.expand_dims(pred_pose[:,4:-1]*tf.expand_dims(pred_pose[:,-1],axis=1),axis=2)
+        else:
+            R,T,R_det = self.rigid_transform_3D(pred_vis,gt_vis)
 
 
         pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
 
         #Loss
-
         lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
         transformation_loss = l2loss(gt_vis,pred_lm_3D)
 
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:0.0,lambda:transformation_loss)
 
-        coord_pair = [gt_vis,pred_lm_3D,R_det]
+        coord_pair = [gt_vis,pred_lm_3D]
 
-        #Construct summaries
-        
+        #Construct summarie
         
         return transformation_loss,coord_pair
