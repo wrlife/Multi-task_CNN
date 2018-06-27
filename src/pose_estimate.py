@@ -124,8 +124,9 @@ class pose_estimate:
 
 
         if self.trainer.opt.with_geo:
+            #import pdb;pdb.set_trace()
             input_geo = tf.concat([landmark1,landmark2],axis=3)
-            pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training, is_reuse=is_reuse)
+            pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training)
 
             quat_est = tfq.Quaternion(pred_pose[:,0:4])
             R = quat_est.as_rotation_matrix()
@@ -137,7 +138,7 @@ class pose_estimate:
         pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
 
         #Loss
-        lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
+        #lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
         transformation_loss = l2loss(gt_vis,pred_lm_3D)
 
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:0.0,lambda:transformation_loss)

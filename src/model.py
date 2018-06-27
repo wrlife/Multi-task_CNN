@@ -255,7 +255,7 @@ def disp_net_single(tgt_image, num_encode, num_features=32,num_out_channel=28, i
             return output
 
 def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True, is_reuse=False):
-    batch_norm_params = {'is_training': is_training,'decay':0.99}
+    batch_norm_params = {'is_training': is_training,'decay':0.9}
     H = tgt_image.get_shape()[1].value
     W = tgt_image.get_shape()[2].value
     max_features=512
@@ -265,7 +265,7 @@ def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True, is_r
                             normalizer_fn=slim.batch_norm,
                             normalizer_params=batch_norm_params,
                             weights_regularizer=slim.l2_regularizer(0.05),
-                            activation_fn=tf.nn.relu,
+                            activation_fn=tf.nn.leaky_relu,
                             outputs_collections=end_points_collection):
              
             cnv_layers = conv_encoder(num_encode,tgt_image,num_features,max_features=max_features)

@@ -131,7 +131,10 @@ if opt.training:
             else:
                 return 0.0     
 
-        pose_loss = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),lambda : est_pose(False,m_trainer,output,data_dict), lambda:est_pose(opt.with_pose,m_trainer,output,data_dict))
+        pose_loss = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),
+                            lambda : est_pose(False,m_trainer,output,data_dict), 
+                            lambda:est_pose(opt.with_pose,m_trainer,output,data_dict))
+
         losses[0] = losses[0]+pose_loss
         losses[4] = pose_loss
 
@@ -158,8 +161,8 @@ if opt.evaluation_dir != "None":
     # import pdb;pdb.set_trace()
     if opt.with_pose:
         pose_loss_eval = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),
-                                lambda : est_pose(False,m_trainer,output_eval, data_dict_eval,is_reuse=opt.training), 
-                                lambda : est_pose(opt.with_pose,m_trainer,output_eval, data_dict_eval,is_reuse=opt.training))
+                                lambda : est_pose(False,m_trainer,output_eval, data_dict_eval), 
+                                lambda : est_pose(opt.with_pose,m_trainer,output_eval, data_dict_eval))
         losses_eval[0] = losses_eval[0]+pose_loss_eval
         losses_eval[4] = pose_loss_eval
 
