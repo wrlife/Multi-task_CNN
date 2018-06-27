@@ -129,6 +129,6 @@ class pose_estimate:
         coord_pair = [gt_vis,pred_lm_3D,R_det]
 
         #Construct summaries
-        tf.summary.scalar('losses/transformation', transformation_loss)
+        
         
         return transformation_loss,coord_pair
