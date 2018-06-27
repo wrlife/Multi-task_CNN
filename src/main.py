@@ -79,7 +79,7 @@ if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+#os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -99,17 +99,13 @@ global_step = tf.Variable(0,
                             trainable = False)
 incr_global_step = tf.assign(global_step,global_step+1)
 
-if opt.with_pose:
-    dataaug = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),lambda : opt.data_aug, lambda:False)
-else:
-    dataaug = tf.constant(opt.data_aug)
-#import pdb;pdb.set_trace()
+
 if opt.training:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(
                                             opt.dataset_dir,
                                             scope_name,
                                             opt.max_steps,
-                                            with_dataaug=dataaug)
+                                            with_dataaug=opt.data_aug)
     losses = list(losses)
 
     #==========================
@@ -117,24 +113,16 @@ if opt.training:
     # estimation
     #==========================
     if opt.with_pose:
-        def est_pose(est,m_trainer,output,data_dict,is_training=True, is_reuse=False):
-            #
-            #import pdb;pdb.set_trace()
-            m_pose_est = pose_estimate(m_trainer)
-            pose_loss,coord_pair = m_pose_est.forward_wrapper(
-                                                    output,
-                                                    data_dict,
-                                                    is_training,
-                                                    is_reuse)
-            if est:
-                return pose_loss
-            else:
-                return 0.0     
 
-        pose_loss = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),
-                            lambda : est_pose(False,m_trainer,output,data_dict), 
-                            lambda:est_pose(opt.with_pose,m_trainer,output,data_dict))
+        m_pose_est = pose_estimate(m_trainer)
+        pose_loss,coord_pair = m_pose_est.forward_wrapper(
+                                                output,
+                                                data_dict
+                                                )
 
+            #return pose_loss#tf.cond(est, lambda:pose_loss,lambda:pose_loss)
+
+        pose_loss = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:pose_loss,lambda:0.0)#est_pose(tf.greater(global_step,tf.ones([],tf.int32)*5000),m_trainer,output,data_dict)
         losses[0] = losses[0]+pose_loss
         losses[4] = pose_loss
 
@@ -158,11 +146,15 @@ if opt.evaluation_dir != "None":
     #Forward path for pose 
     # estimation
     #==========================
-    # import pdb;pdb.set_trace()
+
     if opt.with_pose:
-        pose_loss_eval = tf.cond(tf.less(global_step,tf.ones([],tf.int32)*5000),
-                                lambda : est_pose(False,m_trainer,output_eval, data_dict_eval), 
-                                lambda : est_pose(opt.with_pose,m_trainer,output_eval, data_dict_eval))
+
+        pose_loss_eval,_ = m_pose_est.forward_wrapper(
+                                                output_eval,
+                                                data_dict_eval,
+                                                is_training=opt.training
+                                                )
+        pose_loss_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:pose_loss_eval,lambda:0.0)
         losses_eval[0] = losses_eval[0]+pose_loss_eval
         losses_eval[4] = pose_loss_eval
 

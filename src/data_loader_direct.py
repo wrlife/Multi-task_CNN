@@ -132,8 +132,7 @@ class DataLoader(object):
                                                                                     data_dict['label'], 
                                                                                     data_dict['points2D'],
                                                                                     self.image_height,
-                                                                                    self.image_width,
-                                                                                    with_aug)
+                                                                                    self.image_width)
             data_dict['image'] = image_batch
             data_dict['depth'] = depth_batch
             data_dict['label'] = label_batch
@@ -390,7 +389,7 @@ class DataLoader(object):
         return image, depth, label
 
 
-    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w,with_aug):
+    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w):
 
         def _random_true_false():
             prob = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
@@ -405,6 +404,8 @@ class DataLoader(object):
             y_scaling = scaling[1]
             out_h = tf.cast(in_h * y_scaling, dtype=tf.int32)
             out_w = tf.cast(in_w * x_scaling, dtype=tf.int32)
+
+            #matK[:,0,0] = matK[:,0,0]
 
             image = tf.image.resize_area(image, [out_h, out_w])
             depth = tf.image.resize_area(depth, [out_h, out_w])
@@ -490,7 +491,7 @@ class DataLoader(object):
             image = random_color(image)
             return ir, image, depth, label,landmark
 
-        return tf.cond(tf.equal(with_aug, tf.constant(True)),lambda:do_all(ir, image, depth, label,landmark),lambda:do_color(ir, image, depth, label,landmark))    
+        return do_color(ir, image, depth, label,landmark)#tf.cond(tf.equal(with_aug, tf.constant(True)),lambda:do_all(ir, image, depth, label,landmark),lambda:do_color(ir, image, depth, label,landmark))    
 
         #return ir, image, depth, label,landmark
 

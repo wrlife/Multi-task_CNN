@@ -254,7 +254,7 @@ def disp_net_single(tgt_image, num_encode, num_features=32,num_out_channel=28, i
             
             return output
 
-def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True, is_reuse=False):
+def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True):
     batch_norm_params = {'is_training': is_training,'decay':0.9}
     H = tgt_image.get_shape()[1].value
     W = tgt_image.get_shape()[2].value

@@ -55,7 +55,7 @@ class pose_estimate:
 
         return R, t,R_det
     
-    def forward_wrapper(self,output,data_dict,is_training=True, is_reuse=False):
+    def forward_wrapper(self,output,data_dict,is_training=True):
         '''
         A wrapper function for domain transfer.
         Generate dataloader, model, loss and its own summary
