@@ -99,7 +99,7 @@ global_step = tf.Variable(0,
                             trainable = False)
 incr_global_step = tf.assign(global_step,global_step+1)
 
-
+pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
 if opt.training:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(
                                             opt.dataset_dir,
@@ -115,7 +115,7 @@ if opt.training:
     if opt.with_pose:
 
         m_pose_est = pose_estimate(m_trainer)
-        pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
+        
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                 output,
                                                 data_dict,
@@ -139,7 +139,7 @@ if opt.evaluation_dir != "None":
                                                                         opt.evaluation_dir,
                                                                         scope_name,
                                                                         opt.max_steps,
-                                                                        is_training=True,
+                                                                        is_training=opt.training,
                                                                         is_reuse=opt.training)
     losses_eval = list(losses_eval)
 
@@ -150,8 +150,8 @@ if opt.evaluation_dir != "None":
     #==========================
 
     if opt.with_pose:
-
-        pose_loss_eval,_ = m_pose_est.forward_wrapper(
+        m_pose_est_eval = pose_estimate(m_trainer)
+        pose_loss_eval,_ = m_pose_est_eval.forward_wrapper(
                                                 output_eval,
                                                 data_dict_eval,
                                                 pose_weight,
@@ -255,7 +255,9 @@ elif opt.evaluation:
         m_trainer,
         losses_eval,
         data_dict_eval,
-        output_eval)
+        output_eval,
+        global_step,
+        incr_global_step)
 
 
 #==========================

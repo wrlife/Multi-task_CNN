@@ -21,12 +21,14 @@ def evaluate(opt,
              m_trainer,
              losses,
              data_dict,
-             output):
+             output,
+             global_step,
+             incr_global_step):
 
     eps = 0.000001
     #Summaries
     m_trainer.construct_summary(data_dict,output,losses)
-    thresh = 50
+    thresh = 10000
     workbook = xlsxwriter.Workbook('Evaluation%d.xlsx'%(thresh))
     worksheet = workbook.add_worksheet()
     
@@ -47,10 +49,10 @@ def evaluate(opt,
     worksheet.write('H1', 'eu_dist_overall_normal', bold)
     worksheet.write('I1', 'points_per_frame', bold)
 
-    global_step = tf.Variable(0,
-                                name = 'global_step',
-                                trainable = False)
-    incr_global_step = tf.assign(global_step,global_step+1)
+    # global_step = tf.Variable(0,
+    #                             name = 'global_step',
+    #                             trainable = False)
+    # incr_global_step = tf.assign(global_step,global_step+1)
 
 
     with tf.Session() as sess:
@@ -63,11 +65,11 @@ def evaluate(opt,
         merged = tf.summary.merge_all()
 
         pa=0;ma=0;mi=0;fwi=0;
-        model_vars = collect_vars(m_trainer.scope_name)
-        model_vars['global_step'] = global_step
-        saver = tf.train.Saver(model_vars)
+        # model_vars = collect_vars(m_trainer.scope_name)
+        # model_vars['global_step'] = global_step
+        saver = tf.train.Saver()
 
-        import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         checkpoint = tf.train.latest_checkpoint(opt.checkpoint_dir)
         saver.restore(sess, checkpoint)
         count=0
