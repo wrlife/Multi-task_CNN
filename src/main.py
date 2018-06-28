@@ -75,7 +75,7 @@ if opt.domain_transfer_dir!="None" and opt.with_dom:
 
 evaluate_name = opt.checkpoint_dir[14:]
 
-opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)
+opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)+"_thhm"
 #import pdb;pdb.set_trace()
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
@@ -83,7 +83,7 @@ if not os.path.exists(opt.checkpoint_dir):
 
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+#os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -104,12 +104,12 @@ global_step = tf.Variable(0,
 incr_global_step = tf.assign(global_step,global_step+1)
 
 if opt.with_geo:
-    pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
+    pose_weight = 1.0/50000.0#(tf.cast(global_step,tf.float32)-5000.0)/50000.0
 elif opt.with_pose:
     if opt.evaluation:
         pose_weight=1.0
     else:
-        pose_weight = 1000.0
+        pose_weight = (opt.img_width*opt.img_height)
 
 if opt.training:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(

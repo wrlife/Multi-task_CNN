@@ -92,7 +92,7 @@ class DataLoader(object):
             translation = translation / norm
             translation = tf.concat([translation,norm],axis=0)
             
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*5000.0
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*(self.image_height*self.image_width)/10.0
 
 
             if self.opt.downsample:
