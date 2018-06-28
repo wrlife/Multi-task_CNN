@@ -103,7 +103,14 @@ global_step = tf.Variable(0,
                             trainable = False)
 incr_global_step = tf.assign(global_step,global_step+1)
 
-pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
+if opt.with_geo:
+    pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
+elif opt.with_pose:
+    if opt.evaluation:
+        pose_weight=1.0
+    else:
+        pose_weight = 1000.0
+
 if opt.training:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(
                                             opt.dataset_dir,

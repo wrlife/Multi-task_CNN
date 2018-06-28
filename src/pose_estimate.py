@@ -139,7 +139,7 @@ class pose_estimate:
 
         #Loss
         #lm3d_weights = tf.tile(tf.expand_dims(lm3d_weights,axis=1),[1,3,1])
-        transformation_loss = l2loss(gt_vis,pred_lm_3D)#*pose_weight
+        transformation_loss = l2loss(gt_vis,pred_lm_3D)*pose_weight
 
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:0.0,lambda:transformation_loss)
 
