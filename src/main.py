@@ -79,7 +79,7 @@ if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
 write_params(opt)
-#os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -115,9 +115,11 @@ if opt.training:
     if opt.with_pose:
 
         m_pose_est = pose_estimate(m_trainer)
+        pose_weight = (tf.cast(global_step,tf.float32)-5000.0)/50000.0
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                 output,
-                                                data_dict
+                                                data_dict,
+                                                pose_weight
                                                 )
 
             #return pose_loss#tf.cond(est, lambda:pose_loss,lambda:pose_loss)
@@ -152,6 +154,7 @@ if opt.evaluation_dir != "None":
         pose_loss_eval,_ = m_pose_est.forward_wrapper(
                                                 output_eval,
                                                 data_dict_eval,
+                                                pose_weight,
                                                 is_training=opt.training
                                                 )
         pose_loss_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:pose_loss_eval,lambda:0.0)
