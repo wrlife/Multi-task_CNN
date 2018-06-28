@@ -110,6 +110,9 @@ def compute_loss(output,data_dict,FLAGS):
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight + landmark_loss
 
     else:
+        #import pdb;pdb.set_trace()
+        lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+        landmark = landmark*lm3d_weights
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
     
 
