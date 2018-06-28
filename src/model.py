@@ -267,12 +267,12 @@ def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True):
                             weights_regularizer=slim.l2_regularizer(0.05),
                             activation_fn=tf.nn.leaky_relu,
                             outputs_collections=end_points_collection):
-             
+            #import pdb;pdb.set_trace()
             cnv_layers = conv_encoder(num_encode,tgt_image,num_features,max_features=max_features)
-            cnv_flat = tf.reduce_mean(cnv_layers[-1], [1, 2])
+            #cnv_flat = tf.reduce_mean(cnv_layers[-1], [1, 2])
             #pose_final = tf.reshape(pose_avg, [-1, 8])              
-            #cnv_flat = tf.reshape(cnv_layers[-1], [-1, int((H/2**(num_encode))*(W/2**(num_encode))*np.maximum(num_features*(2**(num_encode-1)),max_features))])
-            fc1 = tf.layers.dense(inputs=cnv_flat, units=max_features, activation=tf.nn.leaky_relu)
+            cnv_flat = tf.reshape(cnv_layers[-1], [-1, cnv_layers[-1].get_shape()[1].value*cnv_layers[-1].get_shape()[2].value*cnv_layers[-1].get_shape()[3].value])
+            fc1 = tf.layers.dense(inputs=cnv_flat, units=max_features*2, activation=tf.nn.leaky_relu)
             pose_final = tf.layers.dense(inputs=fc1, units=8, activation=None)
 
             return pose_final

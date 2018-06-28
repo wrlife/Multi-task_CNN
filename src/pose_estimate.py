@@ -115,8 +115,14 @@ class pose_estimate:
             lm1_val = tf.gather_nd(landmark1,index_gt)
             lm2_val = tf.gather_nd(landmark2,index_pred)
 
-            pred_vis1 = tf.to_float(lm1_val>1000.0)
-            pred_vis2 = tf.to_float(tlm2_val>1000.0)
+            lm1_val_sup = tf.expand_dims(lm1_val[:,0,0],axis=1)
+            lm2_val_sup = tf.expand_dims(lm2_val[:,0,0],axis=1)
+            for ii in range(28):
+                lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
+                lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
+
+            pred_vis1 = tf.to_float(lm1_val_sup>1000.0)
+            pred_vis2 = tf.to_float(lm2_val_sup>1000.0)
             lm3d_weights = pred_vis1
             lm3d_weights = lm3d_weights*pred_vis2
             # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
