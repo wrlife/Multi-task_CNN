@@ -119,6 +119,12 @@ def compute_loss(output,data_dict,FLAGS):
 
     if FLAGS.with_vis:
         vis_loss = compute_vis_loss(visibility,output[2])*vis_weight
+        if FLAGS.evaluation:
+            pred_vis = tf.to_float(tf.expand_dims(output[2],axis=0)>0.5)
+
+            visibility = tf.clip_by_value(visibility,0.0,1.0)     
+
+            vis_loss = tf.reduce_sum(tf.abs(visibility-pred_vis))                   
 
     total_loss = depth_loss+landmark_loss+vis_loss+geo_loss
 

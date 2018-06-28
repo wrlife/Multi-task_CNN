@@ -165,7 +165,7 @@ class DataLoader(object):
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
             #if with_aug is not None:
-            dataset = dataset.map(augment)
+            #dataset = dataset.map(augment)
 
             iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()

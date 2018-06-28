@@ -73,10 +73,14 @@ if opt.with_geo:
 if opt.domain_transfer_dir!="None" and opt.with_dom:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
+evaluate_name = opt.checkpoint_dir[14:]
+
 opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)
 #import pdb;pdb.set_trace()
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
+
+
 
 write_params(opt)
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
@@ -149,7 +153,7 @@ if opt.evaluation_dir != "None":
     # estimation
     #==========================
 
-    if opt.with_pose:
+    if opt.with_pose or opt.evaluation:
         m_pose_est_eval = pose_estimate(m_trainer)
         pose_loss_eval,_ = m_pose_est_eval.forward_wrapper(
                                                 output_eval,
@@ -252,6 +256,7 @@ if opt.training:
 elif opt.evaluation:
     evaluate(
         opt,
+        evaluate_name,
         m_trainer,
         losses_eval,
         data_dict_eval,

@@ -9,6 +9,22 @@ from estimator_rui import *
 import xlsxwriter
 
 
+#---------------------------------------------
+#Function to draw landmark points on image
+#---------------------------------------------
+def drawlandmark(image,points2D,outname,visibility):
+
+    image_landmark = np.copy(image)#np.zeros(image.shape, np.uint8)
+    for i in range(points2D.shape[1]):
+        if visibility[i]==1:
+            cv2.circle(image_landmark,(int(np.round(points2D[0,i])),int(np.round(points2D[1,i]))), 2, (0,255,0), -1)
+        else:
+            cv2.circle(image_landmark,(int(np.round(points2D[0,i])),int(np.round(points2D[1,i]))), 2, (0,0,255), -1)
+
+    #image_landmark = cv2.resize(image_landmark,(640,480),interpolation = cv2.INTER_AREA)
+    cv2.imwrite(outname,image_landmark)
+
+
 def get_lanmark_loc_from_hm(mask,thresh):
 
     ind = np.unravel_index(np.argmax(mask, axis=None), mask.shape)
@@ -18,6 +34,7 @@ def get_lanmark_loc_from_hm(mask,thresh):
     return ind
 
 def evaluate(opt,
+             filename,
              m_trainer,
              losses,
              data_dict,
@@ -29,7 +46,7 @@ def evaluate(opt,
     #Summaries
     m_trainer.construct_summary(data_dict,output,losses)
     thresh = 10000
-    workbook = xlsxwriter.Workbook('Evaluation%d.xlsx'%(thresh))
+    workbook = xlsxwriter.Workbook(filename+'%d.xlsx'%(thresh))
     worksheet = workbook.add_worksheet()
     
     worksheet.set_column(0, 8, 25)
@@ -48,6 +65,8 @@ def evaluate(opt,
     worksheet.write('G1', 'eu_dist_overall_avg', bold)
     worksheet.write('H1', 'eu_dist_overall_normal', bold)
     worksheet.write('I1', 'points_per_frame', bold)
+    worksheet.write('J1', 'Register_err', bold)
+    worksheet.write('K1', 'visibility_err', bold)
 
     # global_step = tf.Variable(0,
     #                             name = 'global_step',
@@ -73,6 +92,9 @@ def evaluate(opt,
         checkpoint = tf.train.latest_checkpoint(opt.checkpoint_dir)
         saver.restore(sess, checkpoint)
         count=0
+
+        avg_trans_error = 0.0  # point to point registered error
+        avg_vis_error = 0.0
         
         TP = np.zeros(28,dtype=np.float32)  # In the view and get detected points
         eu_dist = np.zeros(28,dtype=np.float32)    #clean points distance
@@ -102,7 +124,9 @@ def evaluate(opt,
                     "image": data_dict["image"],
                     "visibility": data_dict["visibility"],
                     "global_step": global_step,
-                    "incr_global_step": incr_global_step
+                    "incr_global_step": incr_global_step,
+                    "trans_loss": losses[4],
+                    
                 }
                 fetches["summary"] = merged
     
@@ -112,29 +136,40 @@ def evaluate(opt,
                     fetches["translation"] = data_dict["translation"]
                     fetches["depth"] = data_dict["depth"]
                     fetches["matK"] = data_dict["matK"]
+
+                if opt.with_vis:
+                    fetches["vis_loss"] = losses[3]
+                
                 results = sess.run(fetches)
                 gs = results["global_step"]
-                test_writer.add_summary(results["summary"],gs)
+                #test_writer.add_summary(results["summary"],gs)
     
                 if opt.with_seg:
                     #Quantitative evaluation
-                    z = results["pred"][0][0,:,:,0]
+                    z = results["output"][1][0,:,:,0]
                     z[z>0.5]=1.0
                     z[z<=0.5]=0.0
         
                     mask = results["gt_seg"][0,:,:,0]
-                    pa += pixel_accuracy(z,mask)
-                    ma += mean_accuracy(z,mask)
-                    mi += mean_IU(z,mask)
-                    fwi += frequency_weighted_IU(z,mask)            
+
+                    pa += np.sum(np.logical_and(z, mask))/np.sum(mask)
+                    # pa += pixel_accuracy(z,mask)
+                    # ma += mean_accuracy(z,mask)
+                    # mi += mean_IU(z,mask)
+                    # fwi += frequency_weighted_IU(z,mask)            
     
 
                 #Result dir
                 points2D = np.zeros([3,28],dtype=np.float32)
-                thresh = 4.0#np.max(results["gt_landmark"][0,:,:,:])/2.0
-                #import pdb;pdb.set_trace()
+                #thresh = 4.0#np.max(results["gt_landmark"][0,:,:,:])/2.0
+
+                avg_trans_error = avg_trans_error+results["trans_loss"]
+
+                if opt.with_vis:
+                    avg_vis_error = avg_vis_error+results["vis_loss"]
+
                 for tt in range(28):
-                    import pdb;pdb.set_trace()
+                    #import pdb;pdb.set_trace()
                     ind = get_lanmark_loc_from_hm(results["output"][0][0,:,:,tt],thresh)
                     
                     points2D[0,tt]=ind[1]
@@ -182,9 +217,12 @@ def evaluate(opt,
                     if ind[0]!=-1:
                         eu_dist_overall[tt] =  eu_dist_overall[tt]+np.sqrt(np.square(ind[1]-ind_gt[1])+np.square(ind[0]-ind_gt[0]))
                         pointscount[tt] = pointscount[tt]+1
-    
-                visibility=np.ones(points2D.shape[1],dtype=np.float64)
-                #drawlandmark(results["image"][0,:,:,:]*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),visibility)
+
+                if opt.with_vis:
+                    visibility=results["output"][2][0,:] #np.ones(points2D.shape[1],dtype=np.float64)
+                    visibility[visibility>0.5] = 1.0
+                    visibility[visibility<=0.5] = 0
+                    drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),visibility)
                 count = count+1
                 #import pdb;pdb.set_trace()
                 print("The %s frame is processed"%(count))
@@ -235,6 +273,12 @@ def evaluate(opt,
         
         #Avg num points per image
         avg_numpoint = np.sum(pointscount)/count
+
+        # Avg register error
+        avg_trans_error = avg_trans_error/count
+
+        # Avg vis error
+        avg_vis_error = avg_vis_error/count      
         
         #print (eu_dist_overall_each)
         #print("Avg dist: %f"%(eu_dist_overall_normal))
@@ -251,4 +295,6 @@ def evaluate(opt,
         worksheet.write_number(row,col+6,eu_dist_overall_avg)
         worksheet.write_number(row,col+7,eu_dist_overall_normal)
         worksheet.write_number(row,col+8,avg_numpoint)
+        worksheet.write_number(row,col+9,avg_trans_error)
+        worksheet.write_number(row,col+10,avg_vis_error)
 
