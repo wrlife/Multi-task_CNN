@@ -10,7 +10,9 @@ from estimator_rui import *
 
 def training(opt,m_trainer,losses,losses_eval,
              data_dict,data_dict_eval,
-             output,output_eval,global_step,incr_global_step):
+             output,output_eval,global_step
+             #,incr_global_step
+             ):
 
     #Summaries
     share_loss = tf.placeholder(tf.bool, shape=())
@@ -82,7 +84,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 fetches = {
                     "train":train_op,
                     "global_step": global_step,
-                    "incr_global_step": incr_global_step
+                    #"incr_global_step": incr_global_step
                 }
 
                 if opt.domain_transfer_dir!="None" and opt.with_dom:
