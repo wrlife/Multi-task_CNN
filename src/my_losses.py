@@ -112,6 +112,11 @@ def compute_loss(output,data_dict,FLAGS):
     else:
         #import pdb;pdb.set_trace()
         lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+        lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
+        lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
+        #import pdb;pdb.set_trace()
+        lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
+
         landmark = landmark*lm3d_weights
         landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
     
