@@ -34,6 +34,13 @@ def l2loss(label,pred,v_weight=None):
     loss = tf.reduce_mean(diff**2)#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
     return loss
 
+def l1loss(label,pred,v_weight=None):
+    diff = label-pred
+    if v_weight is not None:
+        diff = tf.multiply(diff,v_weight)
+    loss = tf.reduce_sum(tf.abs(diff))#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
+    return loss
+
 
 def pixel2cam(depth, pixel_coords, intrinsics, is_homogeneous=True):
   """Transforms coordinates in the pixel frame to the camera frame.
@@ -81,7 +88,7 @@ def compute_loss(output,data_dict,FLAGS):
     geo_loss = 0
 
     depth_weight = 10000
-    landmark_weight = 1
+    landmark_weight = FLAGS.img_height*FLAGS.img_width
     vis_weight=1000
     translation_weight = 100
     quaternion_weight = 5000
@@ -118,7 +125,7 @@ def compute_loss(output,data_dict,FLAGS):
         lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
 
         landmark = landmark*lm3d_weights
-        landmark_loss = l2loss(landmark,pred_landmark)*landmark_weight
+        landmark_loss = l2loss(landmark,pred_landmark)#*landmark_weight
     
 
     #Geometric loss

@@ -18,8 +18,8 @@ def drawlandmark(image,points2D,outname,visibility):
     for i in range(points2D.shape[1]):
         if visibility[i]==1:
             cv2.circle(image_landmark,(int(np.round(points2D[0,i])),int(np.round(points2D[1,i]))), 2, (0,255,0), -1)
-        else:
-            cv2.circle(image_landmark,(int(np.round(points2D[0,i])),int(np.round(points2D[1,i]))), 2, (0,0,255), -1)
+        # else:
+        #     cv2.circle(image_landmark,(int(np.round(points2D[0,i])),int(np.round(points2D[1,i]))), 2, (0,0,255), -1)
 
     #image_landmark = cv2.resize(image_landmark,(640,480),interpolation = cv2.INTER_AREA)
     cv2.imwrite(outname,image_landmark)
@@ -40,7 +40,8 @@ def evaluate(opt,
              data_dict,
              output,
              global_step,
-             incr_global_step):
+             coord_pair
+             ):
 
     eps = 0.000001
     #Summaries
@@ -124,9 +125,9 @@ def evaluate(opt,
                     "image": data_dict["image"],
                     "visibility": data_dict["visibility"],
                     "global_step": global_step,
-                    "incr_global_step": incr_global_step,
                     "trans_loss": losses[4],
-                    
+                    "points1": coord_pair[0],
+                    "points2": coord_pair[1]
                 }
                 fetches["summary"] = merged
     
@@ -143,6 +144,10 @@ def evaluate(opt,
                 results = sess.run(fetches)
                 gs = results["global_step"]
                 #test_writer.add_summary(results["summary"],gs)
+
+                # if opt.proj_img:
+                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'_proj.png'),(results["proj_img"][0]+0.5)*255)
+                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
                     #Quantitative evaluation
@@ -164,12 +169,18 @@ def evaluate(opt,
                 #thresh = 4.0#np.max(results["gt_landmark"][0,:,:,:])/2.0
 
                 avg_trans_error = avg_trans_error+results["trans_loss"]
+                # print(results["points1"])
+                # print(results["points2"])
+                print(results["trans_loss"])
 
                 if opt.with_vis:
                     avg_vis_error = avg_vis_error+results["vis_loss"]
 
+                #import pdb;pdb.set_trace()
+                thresh = np.max(results["output"][0])/2.0
+                print(thresh)
                 for tt in range(28):
-                    #import pdb;pdb.set_trace()
+                    
                     ind = get_lanmark_loc_from_hm(results["output"][0][0,:,:,tt],thresh)
                     
                     points2D[0,tt]=ind[1]
@@ -222,9 +233,10 @@ def evaluate(opt,
                     visibility=results["output"][2][0,:] #np.ones(points2D.shape[1],dtype=np.float64)
                     visibility[visibility>0.5] = 1.0
                     visibility[visibility<=0.5] = 0
-                    drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),visibility)
-                count = count+1
                 #import pdb;pdb.set_trace()
+                drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,results["points1"][0,:], os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
+                count = count+1
+
                 print("The %s frame is processed"%(count))
     
         except tf.errors.OutOfRangeError:

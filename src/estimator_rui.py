@@ -169,7 +169,7 @@ class estimator_rui:
         '''
         Create summary for tensorboard visualization
         '''
-
+        #import pdb;pdb.set_trace()
         pred_landmark = self.parse_output_landmark(input_visual)
         
         if losses!=None:
@@ -196,6 +196,7 @@ class estimator_rui:
                                 gt_landmark)
 
         pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
+        pred_landmark = tf.clip_by_value(pred_landmark,0.0,self.opt.img_height*self.opt.img_width)
         pred_landmark_sum = tf.summary.image('pred_lm_img' , \
                             pred_landmark)
         #return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image,landmark_sum,pred_landmark_sum]) #
@@ -266,7 +267,7 @@ class estimator_rui:
         #Construct input accordingly
         input_ts = self.construct_input(data_dict)
 
-        return input_ts
+        return input_ts,data_dict
 
 def write_params(opt):
     params = open(opt.checkpoint_dir+"/params.txt","w")

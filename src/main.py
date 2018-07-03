@@ -25,7 +25,7 @@ flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("domain_transfer_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Directory name to save the checkpoints")
-flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate", 0.005, "Learning rate of for adam")
 flags.DEFINE_float("learning_rate2", 0.001, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_integer("num_scales", 4, "number of scales")
@@ -53,6 +53,8 @@ flags.DEFINE_boolean("training", True, "if False, start prediction")
 flags.DEFINE_boolean("evaluation", False, "if False, start prediction")
 flags.DEFINE_boolean("prediction", False, "if False, start prediction")
 flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
+flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
+flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
 
 
 opt = flags.FLAGS
@@ -80,7 +82,7 @@ opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+s
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
 
-
+#opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
@@ -103,14 +105,44 @@ global_step = tf.Variable(0,
                             trainable = False)
 #incr_global_step = tf.assign(global_step,global_step+1)
 
+
 if opt.with_geo:
-    pose_weight = 1.0/50000.0#(tf.cast(global_step,tf.float32)-5000.0)/50000.0
+    pose_weight = tf.cast(global_step,tf.float32)/1000000.0
 elif opt.with_pose:
     if opt.evaluation:
         pose_weight=1.0
     else:
-        pose_weight = (opt.img_width*opt.img_height)
+        pose_weight = 1000.0#opt.img_width*opt.img_height
 
+
+#import pdb;pdb.set_trace()
+if opt.pretrain_pose:
+
+    input_ts,data_dict = m_trainer.input_wrapper(                                            
+                                    opt.dataset_dir,
+                                    scope_name,
+                                    opt.max_steps,
+                                    with_dataaug=opt.data_aug)
+
+    output=[]
+    output.append(data_dict["points2D"])
+    m_pose_est_pretrain = pose_estimate(m_trainer)
+    pose_loss,_ = m_pose_est_pretrain.forward_wrapper(
+                                            output,
+                                            data_dict,
+                                            pose_weight,
+                                            is_training=opt.training
+                                            )
+    losses = []
+    losses.append(pose_loss)
+    losses.append(pose_loss)
+    losses.append(pose_loss)
+    losses.append(pose_loss)
+    losses.append(pose_loss)
+    
+
+
+coord_pair=0
 if opt.training:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(
                                             opt.dataset_dir,
@@ -126,25 +158,23 @@ if opt.training:
     if opt.with_pose:
 
         m_pose_est = pose_estimate(m_trainer)
-        
+        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)), lambda:output[0],lambda:data_dict["points2D"])
+        lm_in = output[0]
+        #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
-                                                output,
+                                                lm_in,
                                                 data_dict,
                                                 pose_weight
                                                 )
-
-            #return pose_loss#tf.cond(est, lambda:pose_loss,lambda:pose_loss)
-
-        pose_loss = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:pose_loss,lambda:0.0)#est_pose(tf.greater(global_step,tf.ones([],tf.int32)*5000),m_trainer,output,data_dict)
         losses[0] = losses[0]+pose_loss
         losses[4] = pose_loss
-
 
 
 #==========================
 #Forward path for evaluation
 #During testing, just set None
 #==========================
+
 if opt.evaluation_dir != "None":
     losses_eval, output_eval, data_dict_eval,_ = m_trainer.forward_wrapper(
                                                                         opt.evaluation_dir,
@@ -161,14 +191,16 @@ if opt.evaluation_dir != "None":
     #==========================
 
     if opt.with_pose or opt.evaluation:
+
         m_pose_est_eval = pose_estimate(m_trainer)
-        pose_loss_eval,_ = m_pose_est_eval.forward_wrapper(
-                                                output_eval,
+        lm_in_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:output_eval[0],lambda:data_dict_eval["points2D"])
+        pose_loss_eval,coord_pair = m_pose_est_eval.forward_wrapper(
+                                                lm_in_eval,
                                                 data_dict_eval,
                                                 pose_weight,
                                                 is_training=opt.training
                                                 )
-        pose_loss_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:pose_loss_eval,lambda:0.0)
+        #pose_loss = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*500), lambda:pose_loss,lambda:0.0)#est_pose(tf.greater(global_step,tf.ones([],tf.int32)*5000),m_trainer,output,data_dict)
         losses_eval[0] = losses_eval[0]+pose_loss_eval
         losses_eval[4] = pose_loss_eval
 
@@ -254,6 +286,7 @@ if opt.training:
         output, 
         output_eval,
         global_step,
+        coord_pair
         #incr_global_step
         )
 
@@ -269,7 +302,8 @@ elif opt.evaluation:
         data_dict_eval,
         output_eval,
         global_step,
-        incr_global_step)
+        coord_pair
+        )
 
 
 #==========================

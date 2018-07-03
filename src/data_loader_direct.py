@@ -75,8 +75,6 @@ class DataLoader(object):
             matK = tf.decode_raw(features['matK'], tf.float64)
 
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
-            #image = tf.image.rgb_to_grayscale(image)/255.0
-
 
             IR = tf.cast(tf.reshape(IR,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
             
@@ -92,8 +90,11 @@ class DataLoader(object):
             translation = translation / norm
             translation = tf.concat([translation,norm],axis=0)
             
-            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])*(self.image_height*self.image_width)/10.0
-
+            #import pdb;pdb.set_trace()
+            points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])#*(self.image_height*self.image_width)/10.0
+            div = tf.tile(tf.expand_dims(tf.expand_dims(tf.reduce_max(points2D,[0,1])+0.0000001,axis=0),axis=1),[self.image_height,self.image_width,1])
+            points2D = points2D/div
+            points2D = points2D*(self.image_height*self.image_width)
 
             if self.opt.downsample:
                 image = tf.image.resize_images(image,[224,224])
@@ -125,12 +126,13 @@ class DataLoader(object):
 
         def augment(data_dict):
         
-            ir_batch, image_batch, depth_batch, label_batch,landmark_batch = self.data_augmentation(
+            ir_batch, image_batch, depth_batch, label_batch,landmark_batch,matK = self.data_augmentation(
                                                                                     data_dict['IR'], 
                                                                                     data_dict['image'], 
                                                                                     data_dict['depth'],
                                                                                     data_dict['label'], 
                                                                                     data_dict['points2D'],
+                                                                                    data_dict['matK'],
                                                                                     self.image_height,
                                                                                     self.image_width)
             data_dict['image'] = image_batch
@@ -138,6 +140,7 @@ class DataLoader(object):
             data_dict['label'] = label_batch
             data_dict['points2D'] = landmark_batch
             data_dict['IR'] = ir_batch
+            data_dict['matK'] = matK
             
             return data_dict
             
@@ -165,7 +168,7 @@ class DataLoader(object):
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
             #if with_aug is not None:
-            #dataset = dataset.map(augment)
+            dataset = dataset.map(augment)
 
             iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()
@@ -389,7 +392,7 @@ class DataLoader(object):
         return image, depth, label
 
 
-    def data_augmentation(self, ir, image, depth, label, landmark, out_h, out_w):
+    def data_augmentation(self, ir, image, depth, label, landmark,matK, out_h, out_w):
 
         def _random_true_false():
             prob = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
@@ -415,11 +418,22 @@ class DataLoader(object):
             return ir, image, depth, label,landmark
 
         # Random cropping
-        def random_cropping(ir, image, depth, label,landmark, out_h, out_w):
+        def random_cropping(ir, image, depth, label,landmark,matK, out_h, out_w):
+
+            
             # batch_size, in_h, in_w, _ = im.get_shape().as_list()
             batch_size, in_h, in_w, _ = tf.unstack(tf.shape(image))
             offset_y = tf.random_uniform([1], 0, in_h - out_h + 1, dtype=tf.int32)[0]
             offset_x = tf.random_uniform([1], 0, in_w - out_w + 1, dtype=tf.int32)[0]
+
+            _h = tf.to_float(in_h)
+            _w = tf.to_float(out_h)
+            fx = matK[:,0,0]*_h/_w
+            fy = matK[:,1,1]*_h/_w
+            cx = matK[:,0,2]*_h/_w-tf.to_float(offset_x)
+            cy = matK[:,1,2]*_h/_w-tf.to_float(offset_y)
+            zeros = tf.zeros_like(fx)
+            ones = tf.ones_like(fx)
 
             image = tf.image.crop_to_bounding_box(
                 image, offset_y, offset_x, out_h, out_w)
@@ -431,18 +445,33 @@ class DataLoader(object):
                 landmark, offset_y, offset_x, out_h, out_w)
             ir = tf.image.crop_to_bounding_box(
                 ir, offset_y, offset_x, out_h, out_w)
+
+            matK = tf.stack([tf.stack([fx,zeros,cx],axis=1),
+                            tf.stack([zeros,fy,cy],axis=1),
+                            tf.stack([zeros,zeros,ones],axis=1)],axis=1)
                 
-            return ir, image, depth, label, landmark
+            return ir, image, depth, label, landmark, matK
 
         # Random flip
-        def random_flip(ir, image, depth, label,landmark):
+        def random_flip(ir, image, depth, label,landmark,matK,out_h,out_w):
             # batch_size, in_h, in_w, _ = im.get_shape().as_list()
+            
+            fx = matK[:,0,0]
+            fy = matK[:,1,1]
+            cx = matK[:,0,2]
+            cy = matK[:,1,2]
+            zeros = tf.zeros_like(fx)
+            ones = tf.ones_like(fx)
+
+
             flip1 = _random_true_false()
             image = tf.cond(flip1, lambda:tf.image.flip_left_right(image),lambda:image)
             depth = tf.cond(flip1, lambda:tf.image.flip_left_right(depth),lambda:depth)
             label = tf.cond(flip1, lambda:tf.image.flip_left_right(label),lambda:label)
             landmark = tf.cond(flip1, lambda:tf.image.flip_left_right(landmark),lambda:landmark)
             ir = tf.cond(flip1, lambda:tf.image.flip_left_right(ir),lambda:ir)
+            cx = tf.cond(flip1, lambda:out_w-cx,lambda:cx)
+
 
             flip2 = _random_true_false()
             image = tf.cond(flip2, lambda:tf.image.flip_up_down(image),lambda:image)
@@ -450,8 +479,14 @@ class DataLoader(object):
             label = tf.cond(flip2, lambda:tf.image.flip_up_down(label),lambda:label)
             landmark = tf.cond(flip2, lambda:tf.image.flip_up_down(landmark),lambda:landmark)
             ir = tf.cond(flip2, lambda:tf.image.flip_up_down(ir),lambda:ir)
+            cy = tf.cond(flip2, lambda:out_h-cy,lambda:cy)
 
-            return ir,image, depth, label,landmark
+            #import pdb;pdb.set_trace()
+            matK = tf.stack([tf.stack([fx,zeros,cx],axis=1),
+                            tf.stack([zeros,fy,cy],axis=1),
+                            tf.stack([zeros,zeros,ones],axis=1)],axis=1)
+
+            return ir,image, depth, label,landmark,matK
 
         def random_color(image):
 
@@ -476,22 +511,21 @@ class DataLoader(object):
             image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
             image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
             image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image) 
-  
 
-            return image     
+            return image
 
         def do_color(ir, image, depth, label,landmark):
             image = random_color(image)
             return ir, image, depth, label,landmark
 
-        def do_all(ir, image, depth, label,landmark):
+        def do_all(ir, image, depth, label,landmark,matk):
             ir, image, depth, label,landmark = random_scaling(ir, image, depth, label,landmark)
-            ir, image, depth, label,landmark = random_cropping(ir, image, depth, label,landmark, out_h, out_w)
-            ir ,image, depth, label,landmark = random_flip(ir, image, depth, label,landmark)
+            ir, image, depth, label,landmark,matk = random_cropping(ir, image, depth, label,landmark,matk, out_h, out_w)
+            ir ,image, depth, label,landmark,matk = random_flip(ir, image, depth, label,landmark,matk, out_h, out_w)
             image = random_color(image)
-            return ir, image, depth, label,landmark
+            return ir, image, depth, label,landmark,matk
 
-        return do_color(ir, image, depth, label,landmark)#tf.cond(tf.equal(with_aug, tf.constant(True)),lambda:do_all(ir, image, depth, label,landmark),lambda:do_color(ir, image, depth, label,landmark))    
+        return do_all(ir, image, depth, label,landmark,matK)
 
         #return ir, image, depth, label,landmark
 

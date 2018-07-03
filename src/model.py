@@ -87,7 +87,7 @@ def conv_decoder(num_encode,cnv_layers,num_features,num_out_channel=1,max_featur
         activation_fn=None, normalizer_fn=None, scope='disp1')
     decnv_layers.append(icnv)
     
-    return disp,decnv_layers
+    return disp, decnv_layers
 
 
 def disp_net(tgt_image, is_training=True, is_reuse=False):
