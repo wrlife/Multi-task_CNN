@@ -426,12 +426,15 @@ class DataLoader(object):
             offset_y = tf.random_uniform([1], 0, in_h - out_h + 1, dtype=tf.int32)[0]
             offset_x = tf.random_uniform([1], 0, in_w - out_w + 1, dtype=tf.int32)[0]
 
-            _h = tf.to_float(in_h)
-            _w = tf.to_float(out_h)
-            fx = matK[:,0,0]*_h/_w
-            fy = matK[:,1,1]*_h/_w
-            cx = matK[:,0,2]*_h/_w-tf.to_float(offset_x)
-            cy = matK[:,1,2]*_h/_w-tf.to_float(offset_y)
+            _in_h = tf.to_float(in_h)
+            _in_w = tf.to_float(in_w)
+            _out_h = tf.to_float(out_h)
+            _out_w = tf.to_float(out_w)
+            fx = matK[:,0,0]*_in_w/_out_w
+            fy = matK[:,1,1]*_in_h/_out_h
+            cx = matK[:,0,2]*_in_w/_out_w-tf.to_float(offset_x)
+            cy = matK[:,1,2]*_in_h/_out_h-tf.to_float(offset_y)
+            
             zeros = tf.zeros_like(fx)
             ones = tf.ones_like(fx)
 

@@ -168,10 +168,13 @@ class pose_estimate:
         pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
 
         #Loss
+        num_vis_points = tf.zeros([])
         transformation_loss = l2loss(gt_vis,pred_lm_3D)*pose_weight
 
-        #transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
-        coord_pair = [transformation_loss]
+        if not self.trainer.opt.with_geo:
+            transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
+            num_vis_points = tf.reduce_sum(tf.cast(lm3d_weights,tf.float32))
+        coord_pair = [transformation_loss,num_vis_points]
 
         #Construct summarie
         
