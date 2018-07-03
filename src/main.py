@@ -159,7 +159,7 @@ if opt.training:
 
         m_pose_est = pose_estimate(m_trainer)
         #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)), lambda:output[0],lambda:data_dict["points2D"])
-        lm_in = data_dict["points2D"]#output[0]
+        lm_in = output[0]
         #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                 lm_in,
