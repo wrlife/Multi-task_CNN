@@ -101,40 +101,10 @@ class pose_estimate:
         gt_depth_val = tf.gather_nd(depth1,index_gt)
         pred_depth_val = tf.gather_nd(depth2,index_pred)
 
-        #import pdb;pdb.set_trace()
-        mutualdepth = gt_depth_val*pred_depth_val
-        zero_depth = tf.expand_dims(tf.where(tf.greater(mutualdepth[0,:,0],tf.ones([],tf.float32)*10.0)),axis=0)
-        zero_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(zero_depth)[1]])
-        zero_depth = tf.concat([tf.expand_dims(zero_index, axis=2), tf.cast(zero_depth,tf.int32)], axis=2)
-        gt_depth_val = tf.gather_nd(gt_depth_val,zero_depth)
-        gt_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(gt_lm_coord,[0,2,1]),zero_depth),[0,2,1])
-        pred_depth_val = tf.gather_nd(pred_depth_val,zero_depth)
-        pred_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(pred_lm_coord,[0,2,1]),zero_depth),[0,2,1])
+        
+        #Filter out invisible and depth zero points
 
-        # vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
-        # batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
-        # vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
-        # gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
-        # pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
-
-
-
-        #Project 2D to 3D
-        ones = tf.ones([tf.shape(landmark2)[0], 1, tf.shape(zero_depth)[1]])
-        pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
-        gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
-        gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
-        pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
-
-
-        #Visibility
-        #import pdb;pdb.set_trace()
-        # if self.trainer.opt.with_vis:
-        #     pred_vis1 = tf.to_float(tf.expand_dims(output[2][0,:],axis=0)>0.5)
-        #     pred_vis2 = tf.to_float(tf.expand_dims(output[2][1,:],axis=0)>0.5)
-        #     lm3d_weights = pred_vis1
-        #     lm3d_weights = lm3d_weights*pred_vis2
-        # else:
+        #Invisible points
         lm1_val = tf.gather_nd(landmark1,index_gt)
         lm2_val = tf.gather_nd(landmark2,index_pred)
 
@@ -148,19 +118,53 @@ class pose_estimate:
         pred_vis2 = tf.to_float(lm2_val_sup>(tf.reduce_max(landmark2)/10.0))
         lm3d_weights = pred_vis1
         lm3d_weights = lm3d_weights*pred_vis2
+
+        #mutual invis and depth zero
+        mutualdepth = gt_depth_val*pred_depth_val
+        zero_depth = tf.expand_dims(
+                        tf.where(
+                            tf.logical_and(
+                                tf.greater(mutualdepth[0,:,0],tf.ones([],tf.float32)*10.0),
+                                tf.equal(lm3d_weights[0],tf.ones([],tf.float32))
+                            )
+                        ),
+                    axis=0)
+        zero_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(zero_depth)[1]])
+        zero_depth = tf.concat([tf.expand_dims(zero_index, axis=2), tf.cast(zero_depth,tf.int32)], axis=2)
+        gt_depth_val = tf.gather_nd(gt_depth_val,zero_depth)
+        gt_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(gt_lm_coord,[0,2,1]),zero_depth),[0,2,1])
+        pred_depth_val = tf.gather_nd(pred_depth_val,zero_depth)
+        pred_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(pred_lm_coord,[0,2,1]),zero_depth),[0,2,1])
+
+
+        #Project 2D to 3D
+        ones = tf.ones([tf.shape(landmark2)[0], 1, tf.shape(zero_depth)[1]])
+        pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
+        gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
+        gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
+        pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
+
+        pred_vis = pred_cam_coord
+        gt_vis = gt_cam_coord
+        #Visibility
+        #import pdb;pdb.set_trace()
+        # if self.trainer.opt.with_vis:
+        #     pred_vis1 = tf.to_float(tf.expand_dims(output[2][0,:],axis=0)>0.5)
+        #     pred_vis2 = tf.to_float(tf.expand_dims(output[2][1,:],axis=0)>0.5)
+        #     lm3d_weights = pred_vis1
+        #     lm3d_weights = lm3d_weights*pred_vis2
+        # else:
+
         # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
         # lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
-        vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
-        batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
-        vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
-        gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
-        pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
+        # vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
+        # batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
+        # vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
+        # gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
+        # pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
 
         if self.trainer.opt.with_geo:
             
-            # pred_vis = pred_cam_coord
-            # gt_vis = gt_cam_coord
-
             input_geo = tf.concat([landmark1,landmark2],axis=3)
             pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training)
             quat_est = tfq.Quaternion(pred_pose[:,0:4])
@@ -191,7 +195,7 @@ class pose_estimate:
         #if not self.trainer.opt.with_geo:
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
             
-        coord_pair = [transformation_loss,num_vis_points]
+        coord_pair = [tf.shape(zero_depth)[1],num_vis_points]
 
         #Construct summarie
         
