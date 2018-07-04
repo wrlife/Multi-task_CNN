@@ -85,7 +85,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance

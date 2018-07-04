@@ -81,6 +81,7 @@ class pose_estimate:
         rotation_loss = 0.0
         translation_loss = 0.0
 
+        min_thresh = tf.constant(5000.0)
         
         #Soft arg-max operation
         if self.trainer.opt.with_geo:
@@ -114,8 +115,8 @@ class pose_estimate:
             lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
             lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
 
-        pred_vis1 = tf.to_float(lm1_val_sup>(tf.reduce_max(landmark1)/10.0))
-        pred_vis2 = tf.to_float(lm2_val_sup>(tf.reduce_max(landmark2)/10.0))
+        pred_vis1 = tf.to_float(lm1_val_sup>(tf.maximum(tf.reduce_max(landmark1)/10.0,min_thresh)))
+        pred_vis2 = tf.to_float(lm2_val_sup>(tf.maximum(tf.reduce_max(landmark2)/10.0,min_thresh)))
         lm3d_weights = pred_vis1
         lm3d_weights = lm3d_weights*pred_vis2
 
@@ -195,7 +196,7 @@ class pose_estimate:
         #if not self.trainer.opt.with_geo:
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
             
-        coord_pair = [tf.shape(zero_depth)[1],num_vis_points]
+        coord_pair = [transformation_loss,tf.shape(zero_depth)[1]]
 
         #Construct summarie
         
