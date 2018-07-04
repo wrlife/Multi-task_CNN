@@ -127,7 +127,7 @@ def evaluate(opt,
                     "global_step": global_step,
                     "trans_loss": losses[4],
                     "points1": coord_pair[0],
-                    "points2": coord_pair[1]
+                    "proj_img": coord_pair[1]
                 }
                 fetches["summary"] = merged
     
@@ -145,9 +145,9 @@ def evaluate(opt,
                 gs = results["global_step"]
                 #test_writer.add_summary(results["summary"],gs)
 
-                # if opt.proj_img:
-                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'_proj.png'),(results["proj_img"][0]+0.5)*255)
-                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["image"][1]+0.5)*255)
+                if opt.proj_img:
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_proj.png'),(results["proj_img"][0]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
                     #Quantitative evaluation
@@ -234,7 +234,7 @@ def evaluate(opt,
                     visibility[visibility>0.5] = 1.0
                     visibility[visibility<=0.5] = 0
                 #import pdb;pdb.set_trace()
-                drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,results["points1"][0,:], os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
+                #drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,results["points1"][0,:], os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
                 count = count+1
 
                 print("The %s frame is processed"%(count))

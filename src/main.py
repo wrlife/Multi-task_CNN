@@ -25,7 +25,7 @@ flags.DEFINE_string("evaluation_dir", "None", "Dataset directory")
 flags.DEFINE_string("domain_transfer_dir", "None", "Dataset directory")
 flags.DEFINE_string("checkpoint_dir", "./checkpoints_IR_depth_color_landmark_hm_lastdecode_sm/", "Directory name to save the checkpoints")
 flags.DEFINE_string("init_checkpoint_file", None, "Directory name to save the checkpoints")
-flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate", 0.005, "Learning rate of for adam")
 flags.DEFINE_float("learning_rate2", 0.001, "Learning rate of for adam")
 flags.DEFINE_float("beta1", 0.9, "Momenm term of adam")
 flags.DEFINE_integer("num_scales", 4, "number of scales")
@@ -158,7 +158,7 @@ if opt.training:
     if opt.with_pose:
 
         m_pose_est = pose_estimate(m_trainer)
-        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)), lambda:output[0],lambda:data_dict["points2D"])
+        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*1000), lambda:output[0],lambda:data_dict["points2D"])
         lm_in = output[0]
         #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
@@ -193,7 +193,8 @@ if opt.evaluation_dir != "None":
     if opt.with_pose or opt.evaluation:
 
         m_pose_est_eval = pose_estimate(m_trainer)
-        lm_in_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:output_eval[0],lambda:data_dict_eval["points2D"])
+        #lm_in_eval = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:output_eval[0],lambda:data_dict_eval["points2D"])
+        lm_in_eval = output_eval[0]
         pose_loss_eval,coord_pair = m_pose_est_eval.forward_wrapper(
                                                 lm_in_eval,
                                                 data_dict_eval,

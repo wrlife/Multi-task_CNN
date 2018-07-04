@@ -135,12 +135,31 @@ class pose_estimate:
         #     lm3d_weights = pred_vis1
         #     lm3d_weights = lm3d_weights*pred_vis2
         # else:
+        lm1_val = tf.gather_nd(landmark1,index_gt)
+        lm2_val = tf.gather_nd(landmark2,index_pred)
 
+        lm1_val_sup = tf.expand_dims(lm1_val[:,0,0],axis=1)
+        lm2_val_sup = tf.expand_dims(lm2_val[:,0,0],axis=1)
+        for ii in range(1,28):
+            lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
+            lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
+
+        pred_vis1 = tf.to_float(lm1_val_sup>(tf.reduce_max(landmark1)/10.0))
+        pred_vis2 = tf.to_float(lm2_val_sup>(tf.reduce_max(landmark2)/10.0))
+        lm3d_weights = pred_vis1
+        lm3d_weights = lm3d_weights*pred_vis2
+        # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
+        # lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
+        vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
+        batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
+        vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
+        gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
+        pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
 
         if self.trainer.opt.with_geo:
             
-            pred_vis = pred_cam_coord
-            gt_vis = gt_cam_coord
+            # pred_vis = pred_cam_coord
+            # gt_vis = gt_cam_coord
 
             input_geo = tf.concat([landmark1,landmark2],axis=3)
             pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training)
@@ -150,26 +169,6 @@ class pose_estimate:
 
         else:
             #Get predicted landmark probability
-            lm1_val = tf.gather_nd(landmark1,index_gt)
-            lm2_val = tf.gather_nd(landmark2,index_pred)
-
-            lm1_val_sup = tf.expand_dims(lm1_val[:,0,0],axis=1)
-            lm2_val_sup = tf.expand_dims(lm2_val[:,0,0],axis=1)
-            for ii in range(1,28):
-                lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
-                lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
-
-            pred_vis1 = tf.to_float(lm1_val_sup>(tf.reduce_max(landmark1)/2.0))
-            pred_vis2 = tf.to_float(lm2_val_sup>(tf.reduce_max(landmark2)/2.0))
-            lm3d_weights = pred_vis1
-            lm3d_weights = lm3d_weights*pred_vis2
-            # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
-            # lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
-            vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
-            batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
-            vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
-            gt_vis = tf.transpose(tf.gather_nd(tf.transpose(gt_cam_coord,[0,2,1]),vis_ind),[0,2,1])
-            pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
             R,T,R_det = self.rigid_transform_3D(pred_vis,gt_vis)
 
 
@@ -185,14 +184,14 @@ class pose_estimate:
         pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
 
         #Loss
-        num_vis_points = tf.shape(zero_depth)[1]#tf.zeros([])
+        num_vis_points = tf.reduce_sum(tf.cast(lm3d_weights,tf.float32))
         tepm = tf.shape(zero_index)[1]
-        transformation_loss = l2loss(gt_vis,pred_lm_3D)*pose_weight
+        transformation_loss = l2loss(gt_vis,pred_lm_3D)*pose_weight#+tf.ones([])
 
-        if not self.trainer.opt.with_geo:
-            transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
-            num_vis_points = tf.reduce_sum(tf.cast(lm3d_weights,tf.float32))
-        coord_pair = [tepm,num_vis_points]
+        #if not self.trainer.opt.with_geo:
+        transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
+            
+        coord_pair = [transformation_loss,num_vis_points]
 
         #Construct summarie
         
