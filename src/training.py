@@ -119,6 +119,8 @@ def training(opt,m_trainer,losses,losses_eval,
                                                             duration))
                     print(results["gt3d"][0])
                     print(results["gt3d"][1])
+                    print(results["gt3d"][2])
+                    print(results["gt3d"][3])
                     if opt.evaluation_dir != "None":
                         eval_writer.add_summary(results2["summary"], gs)
                     #import pdb;pdb.set_trace()

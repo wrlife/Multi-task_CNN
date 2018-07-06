@@ -11,6 +11,7 @@ import cv2
 from estimator_rui import *
 from domain_trans import *
 from pose_estimate import *
+from H_estimate import *
 from training import *
 from evaluate import *
 from prediction import *
@@ -55,6 +56,7 @@ flags.DEFINE_boolean("prediction", False, "if False, start prediction")
 flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
 flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
 flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
+flags.DEFINE_boolean("with_H", False, "with homography estimation")
 
 
 opt = flags.FLAGS
@@ -66,6 +68,8 @@ if opt.data_aug:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dataaug"
 if opt.with_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
+if opt.with_H:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_H"
 if opt.with_noise:
     opt.checkpoint_dir = opt.checkpoint_dir+"_noise"
 if opt.with_vis:
@@ -87,7 +91,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-#os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 #==========================
 #Define a estimator instance
@@ -129,7 +133,7 @@ if opt.pretrain_pose:
 
     
     output=data_dict["points2D"]
-    m_pose_est_pretrain = pose_estimate(m_trainer)
+    m_pose_est_pretrain = H_estimate(m_trainer)
     pose_loss,coord_pair = m_pose_est_pretrain.forward_wrapper(
                                             output,
                                             data_dict,
@@ -171,6 +175,27 @@ if opt.training and not opt.pretrain_pose:
                                                 )
         losses[0] = losses[0]+pose_loss
         losses[4] = pose_loss
+
+
+
+    #==========================
+    #Forward path for pose 
+    # estimation
+    #==========================
+    if opt.with_H:
+
+        m_pose_est = H_estimate(m_trainer)
+        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*1000), lambda:output[0],lambda:data_dict["points2D"])
+        lm_in = output[0]
+        #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
+        pose_loss,coord_pair = m_pose_est.forward_wrapper(
+                                                lm_in,
+                                                data_dict,
+                                                pose_weight
+                                                )
+        losses[0] = losses[0]+pose_loss
+        losses[4] = pose_loss
+
 
 
 #==========================
