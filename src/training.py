@@ -26,7 +26,10 @@ def training(opt,m_trainer,losses,losses_eval,
         inputloss = losses
         input_visual = output
         input_data = data_dict
-    m_trainer.construct_summary(input_data,input_visual,inputloss)
+    if not opt.pretrain_pose:
+        m_trainer.construct_summary(input_data,input_visual,inputloss)
+    else:
+        tf.summary.scalar('losses/total_loss', losses[0])
 
     #import pdb;pdb.set_trace()
     with tf.name_scope("train_op"):

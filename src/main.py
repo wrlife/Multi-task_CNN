@@ -72,6 +72,8 @@ if opt.with_vis:
     opt.checkpoint_dir = opt.checkpoint_dir+"_vis"
 if opt.with_geo:
     opt.checkpoint_dir = opt.checkpoint_dir+"_geo"
+if opt.pretrain_pose:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_prepose"
 if opt.domain_transfer_dir!="None" and opt.with_dom:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dom"
 
@@ -85,7 +87,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+#os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -107,7 +109,7 @@ global_step = tf.Variable(0,
 
 
 if opt.with_geo:
-    pose_weight = tf.cast(global_step,tf.float32)/1000000.0
+    pose_weight = 1.0#tf.cast(global_step,tf.float32)/1000000.0
 elif opt.with_pose:
     if opt.evaluation:
         pose_weight=1.0
@@ -116,6 +118,7 @@ elif opt.with_pose:
 
 
 #import pdb;pdb.set_trace()
+coord_pair=0
 if opt.pretrain_pose:
 
     input_ts,data_dict = m_trainer.input_wrapper(                                            
@@ -124,10 +127,10 @@ if opt.pretrain_pose:
                                     opt.max_steps,
                                     with_dataaug=opt.data_aug)
 
-    output=[]
-    output.append(data_dict["points2D"])
+    
+    output=data_dict["points2D"]
     m_pose_est_pretrain = pose_estimate(m_trainer)
-    pose_loss,_ = m_pose_est_pretrain.forward_wrapper(
+    pose_loss,coord_pair = m_pose_est_pretrain.forward_wrapper(
                                             output,
                                             data_dict,
                                             pose_weight,
@@ -142,8 +145,8 @@ if opt.pretrain_pose:
     
 
 
-coord_pair=0
-if opt.training:
+
+if opt.training and not opt.pretrain_pose:
     losses, output, data_dict,_ = m_trainer.forward_wrapper(
                                             opt.dataset_dir,
                                             scope_name,

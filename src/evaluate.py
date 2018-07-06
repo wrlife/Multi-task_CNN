@@ -146,8 +146,9 @@ def evaluate(opt,
                 #test_writer.add_summary(results["summary"],gs)
 
                 if opt.proj_img:
-                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_proj.png'),(results["proj_img"][0]+0.5)*255)
-                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["image"][1]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["proj_img"][0]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][0]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj_tgt'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
                     #Quantitative evaluation
@@ -177,7 +178,7 @@ def evaluate(opt,
                     avg_vis_error = avg_vis_error+results["vis_loss"]
 
                 #import pdb;pdb.set_trace()
-                thresh = np.max(results["output"][0])/2.0
+                thresh = np.max(results["output"][0])/10.0
                 print(thresh)
                 for tt in range(28):
                     

@@ -115,8 +115,8 @@ class pose_estimate:
             lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
             lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
 
-        pred_vis1 = tf.to_float(lm1_val_sup>(tf.maximum(tf.reduce_max(landmark1)/10.0,min_thresh)))
-        pred_vis2 = tf.to_float(lm2_val_sup>(tf.maximum(tf.reduce_max(landmark2)/10.0,min_thresh)))
+        pred_vis1 = tf.to_float(lm1_val_sup>(tf.maximum(tf.reduce_max(landmark1)/5.0,min_thresh)))
+        pred_vis2 = tf.to_float(lm2_val_sup>(tf.maximum(tf.reduce_max(landmark2)/5.0,min_thresh)))
         lm3d_weights = pred_vis1
         lm3d_weights = lm3d_weights*pred_vis2
 
@@ -183,8 +183,10 @@ class pose_estimate:
             transform_mat = tf.concat([R, T], axis=2)
             transform_mat = tf.concat([transform_mat, filler], axis=1)
             output_img,_,_,_,_ = utlr.projective_inverse_warp(tf.expand_dims(data_dict['image'][0,:,:,:],axis=0), depth2[:,:,:,0], transform_mat, tf.expand_dims(data_dict["matK"][1,:,:],axis=0),format='matrix')
-
-
+            image = tf.summary.image('proj' , \
+                            output_img)        
+            image = tf.summary.image('tgt' , \
+                            tf.expand_dims(data_dict['image'][1,:,:,:],axis=0))  
 
         pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
 
@@ -196,7 +198,7 @@ class pose_estimate:
         #if not self.trainer.opt.with_geo:
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
             
-        coord_pair = [transformation_loss,tf.shape(zero_depth)[1]]
+        coord_pair = [transformation_loss,num_vis_points]
 
         #Construct summarie
         
