@@ -94,7 +94,7 @@ class DataLoader(object):
             points2D = tf.reshape(points2D,[self.image_height, self.image_width,28])#*(self.image_height*self.image_width)/10.0
             div = tf.tile(tf.expand_dims(tf.expand_dims(tf.reduce_max(points2D,[0,1])+0.0000001,axis=0),axis=1),[self.image_height,self.image_width,1])
             points2D = points2D/div
-            points2D = points2D*(self.image_height*self.image_width)
+            #points2D = points2D*(self.image_height*self.image_width)
 
             if self.opt.downsample:
                 image = tf.image.resize_images(image,[224,224])

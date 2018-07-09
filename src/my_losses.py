@@ -31,7 +31,7 @@ def l2loss(label,pred,v_weight=None):
     diff = label-pred
     if v_weight is not None:
         diff = tf.multiply(diff,v_weight)
-    loss = tf.reduce_mean(diff**2)#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
+    loss = tf.reduce_sum(diff**2)#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
     return loss
 
 def l1loss(label,pred,v_weight=None):
@@ -85,7 +85,8 @@ def compute_loss(output,data_dict,FLAGS):
     depth_loss = 0
     landmark_loss = 0
     vis_loss = 0
-    geo_loss = 0
+    geo_loss = 1.0
+    dist_loss = 0.0
 
     depth_weight = 10000
     landmark_weight = FLAGS.img_height*FLAGS.img_width
@@ -139,25 +140,111 @@ def compute_loss(output,data_dict,FLAGS):
 
             visibility = tf.clip_by_value(visibility,0.0,1.0)     
 
-            vis_loss = tf.reduce_sum(tf.abs(visibility-pred_vis))                   
+            vis_loss = tf.reduce_sum(tf.abs(visibility-pred_vis))
 
-    total_loss = depth_loss+landmark_loss+vis_loss+geo_loss
+
+    #Local constrain
+    #import pdb;pdb.set_trace()
+    if FLAGS.with_dist:
+        _,H,W,D = pred_landmark.get_shape().as_list()
+        pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
+        landmark.set_shape([FLAGS.batch_size,H,W,D])
+        matK = tf.expand_dims(data_dict['matK'][0,:],axis=0)
+        gt_cam_coord,pred_cam_coord = project_2Dlm_to_3D(landmark,pred_landmark,depth,depth,visibility,visibility,matK,matK,FLAGS)
+        gt_cam_coord_shift = tf.concat([tf.expand_dims(gt_cam_coord[:,:,-1],axis=2),gt_cam_coord[:,:,0:-1]],axis=2)
+        pred_cam_coord_shift = tf.concat([tf.expand_dims(pred_cam_coord[:,:,-1],axis=2),pred_cam_coord[:,:,0:-1]],axis=2)
+        gt_landmarkdist = gt_cam_coord-gt_cam_coord_shift
+        pred_landmarkdist = pred_cam_coord-pred_cam_coord_shift
+        dist_loss = l2loss(gt_landmarkdist,pred_landmarkdist)    
+
+    total_loss = depth_loss+landmark_loss+vis_loss+geo_loss+dist_loss
 
     return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss
+
+
+
+def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,FLAGS,min_thresh=0.1,with_gtvis=True):
+
+    B,H,W,D = landmark1.get_shape().as_list()#tf.shape(landmark1)
+
+    visibility1.set_shape([B,D])
+    visibility2.set_shape([B,D])
+    #Soft arg-max operation
+    #if FLAGS.with_geo:
+    norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
+    lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+    lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+
+    gt_lm_coord = lm1_coord
+    pred_lm_coord = lm2_coord
+    # else:
+    #     pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
+    #     gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
+
+    #Extract depth value at landmark locations
+    batch_index = tf.tile(tf.expand_dims(tf.range(B), 1), [1, D])
+    index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(tf.to_int32(gt_lm_coord),[1]),[0,2,1])], axis=2)
+    index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(tf.to_int32(pred_lm_coord),[1]),[0,2,1])], axis=2)
+    gt_depth_val = tf.gather_nd(depth1,index_gt)
+    pred_depth_val = tf.gather_nd(depth2,index_pred)
+
+    #Get mutually visible points
+    if with_gtvis:
+        lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
+        lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
+    else:
+        lm1_val = tf.gather_nd(landmark1,index_gt)
+        lm2_val = tf.gather_nd(landmark2,index_pred)
+
+        lm1_val_sup = tf.expand_dims(lm1_val[:,0,0],axis=1)
+        lm2_val_sup = tf.expand_dims(lm2_val[:,0,0],axis=1)
+        for ii in range(1,D):
+            lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
+            lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
+
+        pred_vis1 = tf.to_float(lm1_val_sup>(tf.maximum(tf.reduce_max(landmark1)/5.0,min_thresh)))
+        pred_vis2 = tf.to_float(lm2_val_sup>(tf.maximum(tf.reduce_max(landmark2)/5.0,min_thresh)))
+        lm3d_weights = pred_vis1
+        lm3d_weights = lm3d_weights*pred_vis2
+
+    #import pdb;pdb.set_trace()
+    #mutual invis and depth zero
+    mutualdepth = gt_depth_val*pred_depth_val
+    zero_depth =  tf.where(
+                        tf.logical_and(
+                            tf.greater(mutualdepth[:,:,0],tf.ones([],tf.float32)*10.0),
+                            tf.equal(lm3d_weights[:],tf.ones([],tf.float32))))
+                                
+               
+    #zero_index = tf.tile(tf.expand_dims(tf.range(B), 1), [1, tf.shape(zero_depth)[1]])
+    #zero_depth = tf.concat([tf.expand_dims(zero_index, axis=2), tf.cast(zero_depth,tf.int32)], axis=2)
+    gt_depth_val = tf.expand_dims(tf.gather_nd(gt_depth_val,zero_depth),axis=0)
+    gt_lm_coord = tf.transpose(tf.expand_dims(tf.gather_nd(tf.transpose(gt_lm_coord,[0,2,1]),zero_depth),axis=0),[0,2,1])
+    pred_depth_val = tf.expand_dims(tf.gather_nd(pred_depth_val,zero_depth),axis=0)
+    pred_lm_coord = tf.transpose(tf.expand_dims(tf.gather_nd(tf.transpose(pred_lm_coord,[0,2,1]),zero_depth),axis=0),[0,2,1])
+
+
+    #Project 2D to 3D
+    ones = tf.ones([1, 1, tf.shape(zero_depth)[0]])
+    pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
+    gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
+    gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,matK1)
+    pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,matK2)
+
+    return gt_cam_coord,pred_cam_coord
 
 
 def geometric_loss(pred_landmark,landmark,depth,visibility,matK):
 
         #Get gt and estimate landmark locations
-        pred_lm_coord = tf.reverse(argmax_2d(pred_landmark),[1])
-        gt_lm_coord = tf.reverse(argmax_2d(landmark),[1])
-        
-        #import pdb;pdb.set_trace()
+
+        norm_to_regular = tf.concat([tf.ones([1,28,1])*480, tf.ones([1,28,1])*640],axis=2)
+        gt_lm_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark,temperature=1.0)+1)/2.0,[1,28,2])*norm_to_regular,[0,2,1]),[1])
+        pred_lm_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(pred_landmark,temperature=1.0)+1)/2.0,[1,28,2])*norm_to_regular,[0,2,1]),[1])
 
         batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(pred_landmark)[0]), 1), [1, tf.shape(pred_landmark)[3]])
         index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(gt_lm_coord,[1]),[0,2,1])], axis=2)
         index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(pred_lm_coord,[1]),[0,2,1])], axis=2)
-
 
         gt_depth_val = tf.gather_nd(depth[:,:,:,0],index_gt)
         pred_depth_val = tf.gather_nd(depth[:,:,:,0],index_pred)

@@ -65,6 +65,10 @@ class pose_estimate:
         #Landmark heat maps
         landmark1 = tf.expand_dims(output[0,:,:,:],axis=0)
         landmark2 = tf.expand_dims(output[1,:,:,:],axis=0)
+    
+        #GT Landmark heat maps
+        gtlandmark1 = tf.expand_dims(data_dict["points2D"][0,:,:,:],axis=0)
+        gtlandmark2 = tf.expand_dims(data_dict["points2D"][1,:,:,:],axis=0)
 
         #Depth maps
         depth1 = tf.expand_dims(data_dict["depth"][0,:,:,:],axis=0)
@@ -74,6 +78,9 @@ class pose_estimate:
         visibility1 = tf.expand_dims(data_dict['visibility'][0,:],axis=0)
         visibility2 = tf.expand_dims(data_dict['visibility'][1,:],axis=0)
 
+        matK1 = tf.expand_dims(data_dict['matK'][0,:],axis=0)
+        matK2 = tf.expand_dims(data_dict['matK'][1,:],axis=0)        
+
         #Get GT rotation and translation
         quaternion = data_dict['quaternion']
         translation = data_dict['translation']
@@ -81,83 +88,17 @@ class pose_estimate:
         rotation_loss = 0.0
         translation_loss = 0.0
 
-        min_thresh = tf.constant(5000.0)
-        
-        #Soft arg-max operation
-        if self.trainer.opt.with_geo:
-            norm_to_regular = tf.concat([tf.ones([1,28,1])*480, tf.ones([1,28,1])*640],axis=2)
-            lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0)+1)/2.0,[1,28,2])*norm_to_regular,[0,2,1]),[1])
-            lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0)+1)/2.0,[1,28,2])*norm_to_regular,[0,2,1]),[1])
-
-            gt_lm_coord = lm1_coord
-            pred_lm_coord = lm2_coord
-        else:
-            pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
-            gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
-
-        #Extract depth value at landmark locations
-        batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(landmark1)[3]])
-        index_gt = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(tf.to_int32(gt_lm_coord),[1]),[0,2,1])], axis=2)
-        index_pred = tf.concat([tf.expand_dims(batch_index,axis=2), tf.transpose(tf.reverse(tf.to_int32(pred_lm_coord),[1]),[0,2,1])], axis=2)
-        gt_depth_val = tf.gather_nd(depth1,index_gt)
-        pred_depth_val = tf.gather_nd(depth2,index_pred)
-
-        import pdb;pdb.set_trace()
-        #Filter out invisible and depth zero points
-
-        #Invisible points
-        lm1_val = tf.gather_nd(landmark1,index_gt)
-        lm2_val = tf.gather_nd(landmark2,index_pred)
-
-        lm1_val_sup = tf.expand_dims(lm1_val[:,0,0],axis=1)
-        lm2_val_sup = tf.expand_dims(lm2_val[:,0,0],axis=1)
-        for ii in range(1,28):
-            lm1_val_sup = tf.concat([lm1_val_sup,tf.expand_dims(lm1_val[:,ii,ii],axis=1)],axis=1)
-            lm2_val_sup = tf.concat([lm2_val_sup,tf.expand_dims(lm2_val[:,ii,ii],axis=1)],axis=1)                
-
-        pred_vis1 = tf.to_float(lm1_val_sup>(tf.maximum(tf.reduce_max(landmark1)/5.0,min_thresh)))
-        pred_vis2 = tf.to_float(lm2_val_sup>(tf.maximum(tf.reduce_max(landmark2)/5.0,min_thresh)))
-        lm3d_weights = pred_vis1
-        lm3d_weights = lm3d_weights*pred_vis2
-
-        #mutual invis and depth zero
-        mutualdepth = gt_depth_val*pred_depth_val
-        zero_depth = tf.expand_dims(
-                        tf.where(
-                            tf.logical_and(
-                                tf.greater(mutualdepth[0,:,0],tf.ones([],tf.float32)*10.0),
-                                tf.equal(lm3d_weights[0],tf.ones([],tf.float32))
-                            )
-                        ),
-                    axis=0)
-        zero_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(zero_depth)[1]])
-        zero_depth = tf.concat([tf.expand_dims(zero_index, axis=2), tf.cast(zero_depth,tf.int32)], axis=2)
-        gt_depth_val = tf.gather_nd(gt_depth_val,zero_depth)
-        gt_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(gt_lm_coord,[0,2,1]),zero_depth),[0,2,1])
-        pred_depth_val = tf.gather_nd(pred_depth_val,zero_depth)
-        pred_lm_coord = tf.transpose(tf.gather_nd(tf.transpose(pred_lm_coord,[0,2,1]),zero_depth),[0,2,1])
-
-
-        #Project 2D to 3D
-        ones = tf.ones([tf.shape(landmark2)[0], 1, tf.shape(zero_depth)[1]])
-        pred_lm_coord = tf.concat([tf.cast(pred_lm_coord,tf.float32),ones],axis=1)
-        gt_lm_coord = tf.concat([tf.cast(gt_lm_coord,tf.float32),ones],axis=1)
-        gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
-        pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
-
-        pred_vis = pred_cam_coord
-        gt_vis = gt_cam_coord
-        #Visibility
+        #min_thresh = tf.constant(5000.0)
         #import pdb;pdb.set_trace()
-        # if self.trainer.opt.with_vis:
-        #     pred_vis1 = tf.to_float(tf.expand_dims(output[2][0,:],axis=0)>0.5)
-        #     pred_vis2 = tf.to_float(tf.expand_dims(output[2][1,:],axis=0)>0.5)
-        #     lm3d_weights = pred_vis1
-        #     lm3d_weights = lm3d_weights*pred_vis2
-        # else:
+        pred_cam_coord1,gt_cam_coord2 = project_2Dlm_to_3D(landmark1,gtlandmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,self.trainer.opt)
 
-        # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
-        # lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
+        gt_cam_coord1,pred_cam_coord2 = project_2Dlm_to_3D(gtlandmark1,landmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,self.trainer.opt)
+
+        # pred_vis = pred_cam_coord
+        # gt_vis = gt_cam_coord
+
+        lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
+        lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
         # vis_ind = tf.expand_dims(tf.where(tf.equal(lm3d_weights[0],tf.ones([],tf.float32))),axis=0)
         # batch_index = tf.tile(tf.expand_dims(tf.range(tf.shape(landmark1)[0]), 1), [1, tf.shape(vis_ind)[1]])
         # vis_ind = tf.concat([tf.expand_dims(batch_index,axis=2), tf.cast(vis_ind,tf.int32)], axis=2)
@@ -165,43 +106,75 @@ class pose_estimate:
         # pred_vis = tf.transpose(tf.gather_nd(tf.transpose(pred_cam_coord,[0,2,1]),vis_ind),[0,2,1])
 
         if self.trainer.opt.with_geo:
-            
-            input_geo = tf.concat([landmark1,landmark2],axis=3)
-            pred_pose = disp_net_pose(input_geo, num_encode=7,is_training=is_training)
-            quat_est = tfq.Quaternion(pred_pose[:,0:4])
-            R = quat_est.as_rotation_matrix()
-            T = tf.expand_dims(pred_pose[:,4:-1]*tf.expand_dims(pred_pose[:,-1],axis=1),axis=2)
+            #Project left to right
+            input_geo1 = tf.concat([landmark1,landmark2],axis=3)
+            pred_pose1 = disp_net_pose(input_geo1, num_encode=7,is_training=is_training)
+            quat_est1 = tfq.Quaternion(pred_pose1[:,0:4])
+            R1 = quat_est1.as_rotation_matrix()
+            T1 = tf.expand_dims(pred_pose1[:,4:-1]*tf.expand_dims(pred_pose1[:,-1],axis=1),axis=2)
+
+            #Project right to left
+            input_geo2 = tf.concat([landmark2,landmark1],axis=3)
+            pred_pose2 = disp_net_pose(input_geo2, num_encode=7,is_training=is_training)
+            quat_est2 = tfq.Quaternion(pred_pose2[:,0:4])
+            R2 = quat_est2.as_rotation_matrix()
+            T2 = tf.expand_dims(pred_pose2[:,4:-1]*tf.expand_dims(pred_pose2[:,-1],axis=1),axis=2)
+
 
         else:
             #Get predicted landmark probability
-            R,T,R_det = self.rigid_transform_3D(pred_vis,gt_vis)
+            R1,T1,R_det1 = self.rigid_transform_3D(pred_cam_coord2,gt_cam_coord1)
+            R2,T2,R_det2 = self.rigid_transform_3D(pred_cam_coord1,gt_cam_coord2)
 
 
         if self.trainer.opt.proj_img:
             filler = tf.constant([0.0, 0.0, 0.0, 1.0], shape=[1, 1, 4])
             filler = tf.tile(filler, [1, 1, 1])
-            transform_mat = tf.concat([R, T], axis=2)
+            transform_mat = tf.concat([R1, T1], axis=2)
             transform_mat = tf.concat([transform_mat, filler], axis=1)
             output_img,_,_,_,_ = utlr.projective_inverse_warp(tf.expand_dims(data_dict['image'][0,:,:,:],axis=0), depth2[:,:,:,0], transform_mat, tf.expand_dims(data_dict["matK"][1,:,:],axis=0),format='matrix')
-            image = tf.summary.image('proj' , \
+            image = tf.summary.image('proj1' , \
                             output_img)        
-            image = tf.summary.image('tgt' , \
+            image = tf.summary.image('tgt1' , \
                             tf.expand_dims(data_dict['image'][1,:,:,:],axis=0))  
 
-        pred_lm_3D = tf.matmul(R,pred_vis)+tf.tile(T,[1,1,tf.shape(pred_vis)[2]])
+            transform_mat = tf.concat([R2, T2], axis=2)
+            transform_mat = tf.concat([transform_mat, filler], axis=1)
+            output_img,_,_,_,_ = utlr.projective_inverse_warp(tf.expand_dims(data_dict['image'][1,:,:,:],axis=0), depth1[:,:,:,0], transform_mat, tf.expand_dims(data_dict["matK"][0,:,:],axis=0),format='matrix')
+            image = tf.summary.image('proj2' , \
+                            output_img)        
+            image = tf.summary.image('tgt2' , \
+                            tf.expand_dims(data_dict['image'][0,:,:,:],axis=0))
+
+
+        pred_cam_coord2_tran = tf.matmul(R1,pred_cam_coord2)+tf.tile(T1,[1,1,tf.shape(pred_cam_coord2)[2]])
+        pred_cam_coord1_tran = tf.matmul(R2,pred_cam_coord1)+tf.tile(T1,[1,1,tf.shape(pred_cam_coord1)[2]])
 
         #Loss
         num_vis_points = tf.reduce_sum(tf.cast(lm3d_weights,tf.float32))
-        tepm = tf.shape(zero_index)[1]
-        transformation_loss = l2loss(gt_vis,pred_lm_3D)*pose_weight#+tf.ones([])
+        #tepm = tf.shape(zero_index)[1]
+        transformation_loss = l2loss(gt_cam_coord1,pred_cam_coord2_tran)*pose_weight
+        transformation_loss = transformation_loss+l2loss(gt_cam_coord2,pred_cam_coord1_tran)*pose_weight
 
+
+        #Cycle consist
+        if self.trainer.opt.cycle_consist:
+            pred_cam_coord2_cycle = tf.matmul(R2,pred_cam_coord2_tran)+tf.tile(T2,[1,1,tf.shape(pred_cam_coord2_tran)[2]])
+            pred_cam_coord1_cycle = tf.matmul(R1,pred_cam_coord1_tran)+tf.tile(T1,[1,1,tf.shape(pred_cam_coord1_tran)[2]])
+
+            rotation_loss = l2loss(pred_cam_coord2_cycle,pred_cam_coord2)*pose_weight
+            rotation_loss = l2loss(pred_cam_coord1_cycle,pred_cam_coord1)*pose_weight+rotation_loss
+
+        transformation_loss = rotation_loss+transformation_loss
         #if not self.trainer.opt.with_geo:
         transformation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:transformation_loss)
+        rotation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:rotation_loss)
             
         lm1_max = tf.reduce_max(landmark1,[0,1,2])
         lm2_max = tf.reduce_max(landmark2,[0,1,2])
 
-        coord_pair = [transformation_loss,num_vis_points,lm1_max,lm2_max]
+        coord_pair = [rotation_loss,num_vis_points,lm1_max,lm2_max]
+
 
         #Construct summarie
         

@@ -190,12 +190,13 @@ class estimator_rui:
             tf.summary.image('pred_label' , \
                                 pred)
 
-        if "points2D" in data_dict:                    
-            gt_landmark = tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)#tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#
+        if "points2D" in data_dict:
+            random_landmark = tf.random_uniform([], 0, 27,dtype=tf.int32)                 
+            gt_landmark = tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#tf.expand_dims(tf.reduce_sum(data_dict['points2D'],3),axis=3)#tf.expand_dims(data_dict['points2D'][:,:,:,random_landmark],axis=3)#
             landmark_sum = tf.summary.image('gt_lm_img' , \
                                 gt_landmark)
 
-        pred_landmark = tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
+        pred_landmark = tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
         pred_landmark = tf.clip_by_value(pred_landmark,0.0,self.opt.img_height*self.opt.img_width)
         pred_landmark_sum = tf.summary.image('pred_lm_img' , \
                             pred_landmark)

@@ -48,6 +48,7 @@ flags.DEFINE_boolean("with_seg", False, "with seg")
 flags.DEFINE_boolean("with_pose", False, "with pose estimation")
 flags.DEFINE_boolean("with_noise", False, "if False, start prediction")
 flags.DEFINE_boolean("with_geo", False, "with geometry estimation")
+flags.DEFINE_boolean("with_dist", False, "with distance estimation")
 flags.DEFINE_boolean("with_dom", False, "with domain transform")
 flags.DEFINE_boolean("with_vis", False, "with visibility loss")
 flags.DEFINE_boolean("training", True, "if False, start prediction")
@@ -57,6 +58,7 @@ flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
 flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
 flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
 flags.DEFINE_boolean("with_H", False, "with homography estimation")
+flags.DEFINE_boolean("cycle_consist", False, "with cycle consistency")
 
 
 opt = flags.FLAGS
@@ -76,6 +78,10 @@ if opt.with_vis:
     opt.checkpoint_dir = opt.checkpoint_dir+"_vis"
 if opt.with_geo:
     opt.checkpoint_dir = opt.checkpoint_dir+"_geo"
+if opt.with_dist:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_dist"
+if opt.cycle_consist:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_cyc"
 if opt.pretrain_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_prepose"
 if opt.domain_transfer_dir!="None" and opt.with_dom:
@@ -121,8 +127,7 @@ elif opt.with_pose:
         pose_weight = 1000.0#opt.img_width*opt.img_height
 
 
-#import pdb;pdb.set_trace()
-coord_pair=0
+coord_pair=1.5
 if opt.pretrain_pose:
 
     input_ts,data_dict = m_trainer.input_wrapper(                                            
@@ -133,7 +138,7 @@ if opt.pretrain_pose:
 
     
     output=data_dict["points2D"]
-    m_pose_est_pretrain = H_estimate(m_trainer)
+    m_pose_est_pretrain = pose_estimate(m_trainer)
     pose_loss,coord_pair = m_pose_est_pretrain.forward_wrapper(
                                             output,
                                             data_dict,
@@ -141,7 +146,7 @@ if opt.pretrain_pose:
                                             is_training=opt.training
                                             )
     losses = []
-    losses.append(pose_loss)
+    losses.append(coord_pair[0])
     losses.append(pose_loss)
     losses.append(pose_loss)
     losses.append(pose_loss)
@@ -193,7 +198,7 @@ if opt.training and not opt.pretrain_pose:
                                                 data_dict,
                                                 pose_weight
                                                 )
-        losses[0] = losses[0]+pose_loss
+        losses[0] = pose_loss#losses[0]+pose_loss
         losses[4] = pose_loss
 
 

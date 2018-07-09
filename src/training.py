@@ -15,6 +15,7 @@ def training(opt,m_trainer,losses,losses_eval,
              #,incr_global_step
              ):
 
+    #import pdb;pdb.set_trace()
     #Summaries
     share_loss = tf.placeholder(tf.bool, shape=())
     if opt.evaluation_dir != "None":
@@ -98,8 +99,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = losses[0]
                     fetches["summary"] = merged
-                    fetches["gt3d"] = coord_pair
-                    fetches["trans_loss"] = losses[4]
+                    #fetches["gt3d"] = coord_pair
                     # fetches["pred3d"]= pred_lm_3D
 
                     if opt.evaluation_dir != "None":
@@ -117,10 +117,10 @@ def training(opt,m_trainer,losses,losses_eval,
                     train_writer.add_summary(results["summary"], gs)
                     print('Step %d: loss = %.2f (%.3f sec)' % (step, results["loss"],
                                                             duration))
-                    print(results["gt3d"][0])
-                    print(results["gt3d"][1])
-                    print(results["gt3d"][2])
-                    print(results["gt3d"][3])
+                    # print(results["gt3d"][0])
+                    # print(results["gt3d"][1])
+                    # print(results["gt3d"][2])
+                    # print(results["gt3d"][3])
                     if opt.evaluation_dir != "None":
                         eval_writer.add_summary(results2["summary"], gs)
                     #import pdb;pdb.set_trace()
