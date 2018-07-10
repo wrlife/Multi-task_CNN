@@ -92,7 +92,7 @@ def compute_loss(output,data_dict,FLAGS):
     depth_loss = 0
     landmark_loss = 0
     vis_loss = 0
-    geo_loss = 1.0
+    geo_loss = 0.0
     dist_loss = 0.0
 
     depth_weight = 10000

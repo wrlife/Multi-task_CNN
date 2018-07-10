@@ -17,13 +17,6 @@ class pose_estimate:
     def __init__(self,trainer):
         self.trainer = trainer
 
-        self.R1 = tf.eye(3,batch_shape=[1])
-        self.T1 = tf.zeros([1,3,1])
-
-        self.R2 = self.R1
-        self.T2= self.T1
-
-
     def rigid_transform_3D(self,A, B):
         
         centroid_A = tf.expand_dims(tf.reduce_mean(A, axis=2),axis=2)
@@ -60,7 +53,7 @@ class pose_estimate:
         #import pdb;pdb.set_trace()
         # print t
 
-        return R, t,R_det
+        return R, t, R_det
 
     def proj_img(self,R,T,image,depth,matK):
 
@@ -77,7 +70,7 @@ class pose_estimate:
     def est_pose(self,landmark1,landmark2):
 
         input_geo1 = tf.concat([landmark1,landmark2],axis=3)
-        pred_pose1 = disp_net_pose(input_geo1, num_encode=7,is_training=is_training)
+        pred_pose1 = disp_net_pose(input_geo1, num_encode=7,is_training=self.is_training)
         quat_est1 = tfq.Quaternion(pred_pose1[:,0:4])
         R1 = quat_est1.as_rotation_matrix()
         T1 = tf.expand_dims(pred_pose1[:,4:-1]*tf.expand_dims(pred_pose1[:,-1],axis=1),axis=2)
@@ -97,10 +90,17 @@ class pose_estimate:
             R1,T1,R_det1 = self.rigid_transform_3D(pred_cam_coord2,gt_cam_coord1)
             R2,T2,R_det2 = self.rigid_transform_3D(pred_cam_coord1,gt_cam_coord2)
 
-        self.R1= R1
-        self.R2 = R2
-        self.T1 = T1
-        self.T2 = T2
+        #Show project image
+        if self.trainer.opt.proj_img:
+            self.proj_img(R1,T1,
+                    tf.expand_dims(data_dict['image'][0,:,:,:],axis=0),
+                    depth2[:,:,:,0],
+                    tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
+
+            self.proj_img(R2,T2,
+                    tf.expand_dims(data_dict['image'][1,:,:,:],axis=0),
+                    depth1[:,:,:,0],
+                    tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
 
 
         pred_cam_coord2_tran = tf.matmul(R1,pred_cam_coord2)+tf.tile(T1,[1,1,tf.shape(pred_cam_coord2)[2]])
@@ -122,12 +122,16 @@ class pose_estimate:
 
         return transformation_loss
     
+
+
+
+
     def forward_wrapper(self,output,data_dict,pose_weight,is_training=True):
         '''
         A wrapper function for domain transfer.
         Generate dataloader, model, loss and its own summary
         '''
-
+        self.is_training = is_training
         #Landmark heat maps
         landmark1 = tf.expand_dims(output[0,:,:,:],axis=0)
         landmark2 = tf.expand_dims(output[1,:,:,:],axis=0)
@@ -160,31 +164,40 @@ class pose_estimate:
 
         gt_cam_coord1,pred_cam_coord2,usable_points2 = project_2Dlm_to_3D(gtlandmark1,landmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,self.trainer.opt)
 
+
+        def synthetic_points():
+            point = tf.ones([1,3,1])
+            points = tf.concat([point,point,point,point,point],axis=2)
+            return points,points,points,points
+        def real_points(pred_cam_coord1,pred_cam_coord2,gt_cam_coord2,gt_cam_coord1):
+            return pred_cam_coord1,pred_cam_coord2,gt_cam_coord2,gt_cam_coord1
+
+        pred_cam_coord1,pred_cam_coord2,gt_cam_coord2,gt_cam_coord1 = tf.cond(tf.logical_and(tf.greater(usable_points1,tf.ones([],tf.int32)*5),
+                                                                              tf.greater(usable_points2,tf.ones([],tf.int32)*5)
+                                                                                            ),
+                                                                                lambda:real_points(pred_cam_coord1,pred_cam_coord2,gt_cam_coord2,gt_cam_coord1),
+                                                                                lambda:synthetic_points()
+                                                                        )
+
+
+        transformation_loss = self.process_pose_est(landmark1,
+                                                    landmark2,
+                                                    pred_cam_coord1,
+                                                    gt_cam_coord2,
+                                                    pred_cam_coord2,
+                                                    gt_cam_coord1,
+                                                    depth1,depth2,
+                                                    data_dict,
+                                                    pose_weight)
         # pred_vis = pred_cam_coord
         # gt_vis = gt_cam_coord
-
-
-
-
-
-        transformation_loss = tf.cond(tf.logical_and(tf.greater(usable_points1,tf.ones([],tf.int32)*3),
-                                                    tf.greater(usable_points2,tf.ones([],tf.int32)*3)
+        transformation_loss = tf.cond(tf.logical_and(tf.greater(usable_points1,tf.ones([],tf.int32)*5),
+                                                    tf.greater(usable_points2,tf.ones([],tf.int32)*5)
                                                     ),
-                                      lambda:self.process_pose_est(landmark1,landmark2,pred_cam_coord1,gt_cam_coord2,pred_cam_coord2,gt_cam_coord1,depth1,depth2,data_dict,pose_weight),
+                                      lambda:transformation_loss,
                                       lambda:tf.zeros([])
                                )
 
-        #Show project image
-        if self.trainer.opt.proj_img:
-            self.proj_img(self.R1,self.T1,
-                    tf.expand_dims(data_dict['image'][0,:,:,:],axis=0),
-                    depth2[:,:,:,0],
-                    tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
-
-            self.proj_img(self.R2,self.T2,
-                    tf.expand_dims(data_dict['image'][1,:,:,:],axis=0),
-                    depth1[:,:,:,0],
-                    tf.expand_dims(data_dict["matK"][0,:,:],axis=0)) 
 
         # lm3d_weights = tf.clip_by_value(visibility1,0.0,1.0)
         # lm3d_weights = lm3d_weights*tf.clip_by_value(visibility2,0.0,1.0)
@@ -200,7 +213,7 @@ class pose_estimate:
         # rotation_loss = tf.cond(tf.less(tf.reduce_sum(tf.cast(lm3d_weights,tf.float32)),tf.ones([],tf.float32)*3.0),lambda:tf.zeros([]),lambda:rotation_loss)
 
 
-        coord_pair = [usable_points2]
+        coord_pair = [usable_points1,usable_points2]
 
 
         #Construct summarie
