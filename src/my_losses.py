@@ -97,6 +97,7 @@ def compute_loss(output,data_dict,FLAGS):
 
     depth_weight = 10000
     landmark_weight = FLAGS.img_height*FLAGS.img_width
+    dist_weight = 100#FLAGS.img_height*FLAGS.img_width/100.0#1000
     vis_weight=1000
     translation_weight = 100
     quaternion_weight = 5000
@@ -133,7 +134,7 @@ def compute_loss(output,data_dict,FLAGS):
         lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
 
         landmark = landmark*lm3d_weights
-        landmark_loss = l2loss(landmark,pred_landmark)#*landmark_weight
+        landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
     
 
     #Geometric loss
@@ -162,7 +163,8 @@ def compute_loss(output,data_dict,FLAGS):
         pred_cam_coord_shift = tf.concat([tf.expand_dims(pred_cam_coord[:,:,-1],axis=2),pred_cam_coord[:,:,0:-1]],axis=2)
         gt_landmarkdist = gt_cam_coord-gt_cam_coord_shift
         pred_landmarkdist = pred_cam_coord-pred_cam_coord_shift
-        dist_loss = l2loss(gt_landmarkdist,pred_landmarkdist)    
+        dist_loss = l2loss(gt_landmarkdist,pred_landmarkdist)*dist_weight
+        tf.summary.scalar('losses/dist_loss', dist_loss) 
 
     total_loss = depth_loss+landmark_loss+vis_loss+geo_loss+dist_loss
 
@@ -170,23 +172,23 @@ def compute_loss(output,data_dict,FLAGS):
 
 
 
-def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,FLAGS,min_thresh=0.1,with_gtvis=True):
+def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,FLAGS,min_thresh=0.1,with_gtvis=True,with_pose=True):
 
     B,H,W,D = landmark1.get_shape().as_list()#tf.shape(landmark1)
 
     visibility1.set_shape([B,D])
     visibility2.set_shape([B,D])
     #Soft arg-max operation
-    #if FLAGS.with_geo:
-    norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
-    lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
-    lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+    if with_pose:
+        norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
+        lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+        lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
 
-    gt_lm_coord = lm1_coord
-    pred_lm_coord = lm2_coord
-    # else:
-    #     pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
-    #     gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
+        gt_lm_coord = lm1_coord
+        pred_lm_coord = lm2_coord
+    else:
+        pred_lm_coord = tf.reverse(argmax_2d(landmark2),[1])
+        gt_lm_coord = tf.reverse(argmax_2d(landmark1),[1])
 
     #Extract depth value at landmark locations
     batch_index = tf.tile(tf.expand_dims(tf.range(B), 1), [1, D])

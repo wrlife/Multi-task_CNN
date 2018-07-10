@@ -126,8 +126,8 @@ def evaluate(opt,
                     "visibility": data_dict["visibility"],
                     "global_step": global_step,
                     "trans_loss": losses[4],
-                    "points1": coord_pair[0],
-                    "proj_img": coord_pair[1]
+                    #"points1": coord_pair[0],
+                    #"proj_img": coord_pair[1]
                 }
                 fetches["summary"] = merged
     
@@ -143,12 +143,12 @@ def evaluate(opt,
                 
                 results = sess.run(fetches)
                 gs = results["global_step"]
-                #test_writer.add_summary(results["summary"],gs)
+                test_writer.add_summary(results["summary"],gs)
 
-                if opt.proj_img:
-                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["proj_img"][0]+0.5)*255)
-                    cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][0]+0.5)*255)
-                    cv2.imwrite(os.path.join('./test','proj_tgt'+str(count)+'.png'),(results["image"][1]+0.5)*255)
+                # if opt.proj_img:
+                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["proj_img"][0]+0.5)*255)
+                #     cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][0]+0.5)*255)
+                #     cv2.imwrite(os.path.join('./test','proj_tgt'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
                     #Quantitative evaluation
@@ -178,7 +178,7 @@ def evaluate(opt,
                     avg_vis_error = avg_vis_error+results["vis_loss"]
 
                 #import pdb;pdb.set_trace()
-                thresh = np.max(results["output"][0])/10.0
+                thresh = np.max(results["output"][0])/2.0
                 print(thresh)
                 for tt in range(28):
                     
@@ -235,7 +235,7 @@ def evaluate(opt,
                     visibility[visibility>0.5] = 1.0
                     visibility[visibility<=0.5] = 0
                 #import pdb;pdb.set_trace()
-                #drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,results["points1"][0,:], os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
+                drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
                 count = count+1
 
                 print("The %s frame is processed"%(count))

@@ -97,7 +97,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-#os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 #==========================
 #Define a estimator instance
@@ -115,9 +115,9 @@ m_trainer = estimator_rui(opt,scope_name)
 global_step = tf.Variable(0,
                             name = 'global_step',
                             trainable = False)
-#incr_global_step = tf.assign(global_step,global_step+1)
+incr_global_step = tf.assign(global_step,global_step+1)
 
-
+pose_weight=1.0
 if opt.with_geo:
     pose_weight = tf.cast(global_step,tf.float32)/1000000.0
 elif opt.with_pose:
@@ -320,8 +320,8 @@ if opt.training:
         output, 
         output_eval,
         global_step,
-        coord_pair
-        #incr_global_step
+        coord_pair,
+        incr_global_step
         )
 
 #==========================

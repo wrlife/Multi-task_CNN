@@ -12,7 +12,7 @@ def training(opt,m_trainer,losses,losses_eval,
              data_dict,data_dict_eval,
              output,output_eval,global_step,
              coord_pair
-             #,incr_global_step
+             ,incr_global_step
              ):
 
     #import pdb;pdb.set_trace()
@@ -37,7 +37,20 @@ def training(opt,m_trainer,losses,losses_eval,
 
         #Optimization
         optim = tf.train.AdamOptimizer(opt.learning_rate, opt.beta1)
-        train_op = slim.learning.create_train_op(losses[0], optim)#,variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, m_trainer.scope_name))
+
+        #import pdb;pdb.set_trace()
+        # Get the gradient pairs (Tensor, Variable)
+        grads = optim.compute_gradients(losses[0])
+        # Update the weights wrt to the gradient
+        train_op = optim.apply_gradients(grads)
+        # Save the grads with tf.summary.histogram
+        #for index, grad in enumerate(grads):
+        #import pdb;pdb.set_trace
+        tf.summary.histogram("{}-grad".format(grads[-1][1].name), grads[-1])
+        tf.summary.histogram("{}-grad".format(grads[-2][1].name), grads[-2])
+
+        
+        #train_op = slim.learning.create_train_op(losses[0], optim)#,variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, m_trainer.scope_name))
 
     #Start training
     with tf.name_scope("parameter_count"):
@@ -89,7 +102,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 fetches = {
                     "train":train_op,
                     "global_step": global_step,
-                    #"incr_global_step": incr_global_step
+                    "incr_global_step": incr_global_step
                 }
 
                 if opt.domain_transfer_dir!="None" and opt.with_dom:
@@ -117,6 +130,8 @@ def training(opt,m_trainer,losses,losses_eval,
                     train_writer.add_summary(results["summary"], gs)
                     print('Step %d: loss = %.2f (%.3f sec)' % (step, results["loss"],
                                                             duration))
+                    
+                    #import pdb;pdb.set_trace()
                     # print(results["gt3d"][0])
                     # print(results["gt3d"][1])
                     # print(results["gt3d"][2])
