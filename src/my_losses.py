@@ -34,6 +34,13 @@ def l2loss(label,pred,v_weight=None):
     loss = tf.reduce_sum(diff**2)#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
     return loss
 
+def l2loss_mean(label,pred,v_weight=None):
+    diff = label-pred
+    if v_weight is not None:
+        diff = tf.multiply(diff,v_weight)
+    loss = tf.reduce_mean(diff**2)#/tf.cast(tf.shape(diff)[0]*tf.shape(diff)[1]*tf.shape(diff)[2]*tf.shape(diff)[3],tf.float32)
+    return loss
+
 def l1loss(label,pred,v_weight=None):
     diff = label-pred
     if v_weight is not None:
@@ -150,7 +157,7 @@ def compute_loss(output,data_dict,FLAGS):
         pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
         landmark.set_shape([FLAGS.batch_size,H,W,D])
         matK = tf.expand_dims(data_dict['matK'][0,:],axis=0)
-        gt_cam_coord,pred_cam_coord = project_2Dlm_to_3D(landmark,pred_landmark,depth,depth,visibility,visibility,matK,matK,FLAGS)
+        gt_cam_coord,pred_cam_coord,_ = project_2Dlm_to_3D(landmark,pred_landmark,depth,depth,visibility,visibility,matK,matK,FLAGS)
         gt_cam_coord_shift = tf.concat([tf.expand_dims(gt_cam_coord[:,:,-1],axis=2),gt_cam_coord[:,:,0:-1]],axis=2)
         pred_cam_coord_shift = tf.concat([tf.expand_dims(pred_cam_coord[:,:,-1],axis=2),pred_cam_coord[:,:,0:-1]],axis=2)
         gt_landmarkdist = gt_cam_coord-gt_cam_coord_shift
@@ -210,10 +217,13 @@ def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2
     #import pdb;pdb.set_trace()
     #mutual invis and depth zero
     mutualdepth = gt_depth_val*pred_depth_val
-    zero_depth =  tf.where(
-                        tf.logical_and(
+
+    usable_points = tf.logical_and(
                             tf.greater(mutualdepth[:,:,0],tf.ones([],tf.float32)*10.0),
-                            tf.equal(lm3d_weights[:],tf.ones([],tf.float32))))
+                            tf.equal(lm3d_weights[:],tf.ones([],tf.float32)))
+
+    zero_depth =  tf.where(usable_points)
+    usable_points = tf.reduce_sum(tf.to_int32(usable_points))
                                 
                
     #zero_index = tf.tile(tf.expand_dims(tf.range(B), 1), [1, tf.shape(zero_depth)[1]])
@@ -231,7 +241,7 @@ def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2
     gt_cam_coord = pixel2cam(gt_depth_val,gt_lm_coord,matK1)
     pred_cam_coord = pixel2cam(pred_depth_val,pred_lm_coord,matK2)
 
-    return gt_cam_coord,pred_cam_coord
+    return gt_cam_coord,pred_cam_coord,usable_points
 
 
 def geometric_loss(pred_landmark,landmark,depth,visibility,matK):
