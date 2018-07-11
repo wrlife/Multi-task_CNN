@@ -42,7 +42,7 @@ def training(opt,m_trainer,losses,losses_eval,
         # Get the gradient pairs (Tensor, Variable)
         grads = optim.compute_gradients(losses[0])
         # Update the weights wrt to the gradient
-        train_op = optim.apply_gradients(grads)
+        #train_op = optim.apply_gradients(grads)
         # Save the grads with tf.summary.histogram
         #for index, grad in enumerate(grads):
         #import pdb;pdb.set_trace
@@ -50,7 +50,7 @@ def training(opt,m_trainer,losses,losses_eval,
         tf.summary.histogram("{}-grad".format(grads[-2][1].name), grads[-2])
 
         
-        #train_op = slim.learning.create_train_op(losses[0], optim)#,variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, m_trainer.scope_name))
+        train_op = slim.learning.create_train_op(losses[0], optim)#,variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, m_trainer.scope_name))
 
     #Start training
     with tf.name_scope("parameter_count"):
@@ -59,7 +59,7 @@ def training(opt,m_trainer,losses,losses_eval,
 
     # model_vars = collect_vars(m_trainer.scope_name)
     # model_vars['global_step'] = global_step
-    saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,m_trainer.scope_name))
+    saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
 
     # if opt.domain_transfer_dir!="None":
     #     model_fix = collect_vars("fixnet")
@@ -112,7 +112,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = losses[0]
                     fetches["summary"] = merged
-                    fetches["gt3d"] = coord_pair
+                    #fetches["gt3d"] = coord_pair
                     # fetches["pred3d"]= pred_lm_3D
 
                     if opt.evaluation_dir != "None":
