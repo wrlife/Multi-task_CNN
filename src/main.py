@@ -89,7 +89,7 @@ if opt.domain_transfer_dir!="None" and opt.with_dom:
 
 evaluate_name = opt.checkpoint_dir[14:]
 
-opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)+"_thhm"
+opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)+"_posefeedback"
 #import pdb;pdb.set_trace()
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
@@ -97,8 +97,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
-
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 #==========================
 #Define a estimator instance
 #Estimator wraps dataloader, 
@@ -119,7 +118,7 @@ incr_global_step = tf.assign(global_step,global_step+1)
 
 pose_weight=1.0
 if opt.with_geo:
-    pose_weight = tf.cast(global_step,tf.float32)/1000000.0
+    pose_weight = 1.0#tf.cast(global_step,tf.float32)/1000000.0
 elif opt.with_pose:
     if opt.evaluation:
         pose_weight=1.0

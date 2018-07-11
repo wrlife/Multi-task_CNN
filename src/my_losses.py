@@ -134,7 +134,7 @@ def compute_loss(output,data_dict,FLAGS):
         lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
 
         landmark = landmark*lm3d_weights
-        landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
+        #landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
     
 
     #Geometric loss
@@ -179,10 +179,11 @@ def project_2Dlm_to_3D(landmark1,landmark2,depth1,depth2,visibility1,visibility2
     visibility1.set_shape([B,D])
     visibility2.set_shape([B,D])
     #Soft arg-max operation
+    #import pdb;pdb.set_trace()
     if with_pose:
         norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
-        lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
-        lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+        lm1_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark1,temperature=1.0/(FLAGS.img_height*FLAGS.img_width),trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+        lm2_coord = tf.reverse(tf.transpose(tf.reshape((tf.contrib.layers.spatial_softmax(landmark2,temperature=1.0/(FLAGS.img_height*FLAGS.img_width),trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
 
         gt_lm_coord = lm1_coord
         pred_lm_coord = lm2_coord

@@ -59,7 +59,7 @@ def training(opt,m_trainer,losses,losses_eval,
 
     # model_vars = collect_vars(m_trainer.scope_name)
     # model_vars['global_step'] = global_step
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,m_trainer.scope_name))
 
     # if opt.domain_transfer_dir!="None":
     #     model_fix = collect_vars("fixnet")
@@ -112,7 +112,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = losses[0]
                     fetches["summary"] = merged
-                    #fetches["gt3d"] = coord_pair
+                    fetches["gt3d"] = coord_pair
                     # fetches["pred3d"]= pred_lm_3D
 
                     if opt.evaluation_dir != "None":
@@ -132,8 +132,8 @@ def training(opt,m_trainer,losses,losses_eval,
                                                             duration))
                     
                     #import pdb;pdb.set_trace()
-                    # print(results["gt3d"][0])
-                    # print(results["gt3d"][1])
+                    #print(results["gt3d"][0])
+                    #print(results["gt3d"][1])
                     # print(results["gt3d"][2])
                     # print(results["gt3d"][3])
                     if opt.evaluation_dir != "None":

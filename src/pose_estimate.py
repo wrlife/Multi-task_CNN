@@ -86,12 +86,13 @@ class pose_estimate:
             R1,T1 = self.est_pose(landmark1,landmark2)
             R2,T2 = self.est_pose(landmark2,landmark1)
         else:
-            #Get predicted landmark probability
+        #Get predicted landmark probability
             R1,T1,R_det1 = self.rigid_transform_3D(pred_cam_coord2,gt_cam_coord1)
             R2,T2,R_det2 = self.rigid_transform_3D(pred_cam_coord1,gt_cam_coord2)
 
         #Show project image
         if self.trainer.opt.proj_img:
+
             self.proj_img(R1,T1,
                     tf.expand_dims(data_dict['image'][0,:,:,:],axis=0),
                     depth2[:,:,:,0],
@@ -102,7 +103,12 @@ class pose_estimate:
                     depth1[:,:,:,0],
                     tf.expand_dims(data_dict["matK"][0,:,:],axis=0))
 
-        import pdb;pdb.set_trace()
+            # self.proj_img(R1_cp,T1_cp,
+            #         tf.expand_dims(data_dict['image'][0,:,:,:],axis=0),
+            #         depth2[:,:,:,0],
+            #         tf.expand_dims(data_dict["matK"][1,:,:],axis=0))
+
+        #import pdb;pdb.set_trace()
         pred_cam_coord2_tran = tf.matmul(R1,pred_cam_coord2)+tf.tile(T1,[1,1,tf.shape(pred_cam_coord2)[2]])
         pred_cam_coord1_tran = tf.matmul(R2,pred_cam_coord1)+tf.tile(T2,[1,1,tf.shape(pred_cam_coord1)[2]])
         #Loss
@@ -156,7 +162,7 @@ class pose_estimate:
         translation = data_dict['translation']
 
         
-        translation_loss = 0.0
+        transformation_loss =tf.zeros([])
 
         pred_cam_coord1,gt_cam_coord2,usable_points1 = project_2Dlm_to_3D(landmark1,gtlandmark2,depth1,depth2,visibility1,visibility2,matK1,matK2,self.trainer.opt,with_pose=self.trainer.opt.with_pose)
 
@@ -195,7 +201,13 @@ class pose_estimate:
                                       lambda:tf.zeros([])
                                )
 
-        coord_pair = [usable_points1,usable_points2]
+
+
+
+        coord_pair = [landmark1,landmark2]
+
+
+
 
 
         #Construct summarie
