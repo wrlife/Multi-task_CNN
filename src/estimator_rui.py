@@ -34,7 +34,8 @@ def collect_vars(scope, start=None, end=None, prepend_scope=None):
                 break
     #import pdb;pdb.set_trace()
     for var in vars[start:end]:
-        var_name = remove_first_scope(var.op.name)
+        var_name = var.op.name
+        #var_name = remove_first_scope(var.op.name)
         if prepend_scope is not None:
             var_name = os.path.join(prepend_scope, var_name)
         var_dict[var_name] = var

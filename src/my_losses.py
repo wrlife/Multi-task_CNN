@@ -97,7 +97,7 @@ def compute_loss(output,data_dict,FLAGS):
 
     depth_weight = 10000
     landmark_weight = FLAGS.img_height*FLAGS.img_width
-    dist_weight = 100#FLAGS.img_height*FLAGS.img_width/100.0#1000
+    dist_weight = 1#FLAGS.img_height*FLAGS.img_width/100.0#1000
     vis_weight=1000
     translation_weight = 100
     quaternion_weight = 5000
@@ -127,14 +127,15 @@ def compute_loss(output,data_dict,FLAGS):
 
     else:
         #import pdb;pdb.set_trace()
-        lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
-        lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
-        lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
-        #import pdb;pdb.set_trace()
-        lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
+        if FLAGS.with_lm:
+            lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+            lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
+            lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
+            #import pdb;pdb.set_trace()
+            lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
 
-        landmark = landmark*lm3d_weights
-        #landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
+            landmark = landmark*lm3d_weights
+            landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
     
 
     #Geometric loss
@@ -163,12 +164,14 @@ def compute_loss(output,data_dict,FLAGS):
         pred_cam_coord_shift = tf.concat([tf.expand_dims(pred_cam_coord[:,:,-1],axis=2),pred_cam_coord[:,:,0:-1]],axis=2)
         gt_landmarkdist = gt_cam_coord-gt_cam_coord_shift
         pred_landmarkdist = pred_cam_coord-pred_cam_coord_shift
-        dist_loss = l2loss(gt_landmarkdist,pred_landmarkdist)*dist_weight
-        tf.summary.scalar('losses/dist_loss', dist_loss) 
+        dist_loss = l2loss_mean(gt_landmarkdist,pred_landmarkdist)*dist_weight
+        tf.summary.scalar('losses/dist_loss', dist_loss)
+
+        #test = [gt_cam_coord,pred_cam_coord,gt_cam_coord_shift,pred_cam_coord_shift]
 
     total_loss = depth_loss+landmark_loss+vis_loss+geo_loss+dist_loss
 
-    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss
+    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss#,test
 
 
 

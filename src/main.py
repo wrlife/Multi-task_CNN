@@ -58,6 +58,7 @@ flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
 flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
 flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
 flags.DEFINE_boolean("with_H", False, "with homography estimation")
+flags.DEFINE_boolean("with_lm", True, "with homography estimation")
 flags.DEFINE_boolean("cycle_consist", False, "with cycle consistency")
 
 
@@ -89,7 +90,7 @@ if opt.domain_transfer_dir!="None" and opt.with_dom:
 
 evaluate_name = opt.checkpoint_dir[14:]
 
-opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)+"_posefeedback"
+opt.checkpoint_dir = opt.checkpoint_dir+"/lr1_"+str(opt.learning_rate)+"_lr2_"+str(opt.learning_rate2)+"_numEncode"+str(opt.num_encoders)+"_numFeatures"+str(opt.num_features)
 #import pdb;pdb.set_trace()
 if not os.path.exists(opt.checkpoint_dir):
     os.makedirs(opt.checkpoint_dir)
@@ -175,7 +176,9 @@ if opt.training and not opt.pretrain_pose:
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                 lm_in,
                                                 data_dict,
-                                                pose_weight
+                                                pose_weight,
+                                                "pose",
+                                                is_training=opt.training
                                                 )
         losses[0] = losses[0]+pose_loss
         losses[4] = pose_loss
@@ -206,7 +209,7 @@ if opt.training and not opt.pretrain_pose:
 #Forward path for evaluation
 #During testing, just set None
 #==========================
-
+#import pdb;pdb.set_trace()
 if opt.evaluation_dir != "None":
     losses_eval, output_eval, data_dict_eval,_ = m_trainer.forward_wrapper(
                                                                         opt.evaluation_dir,
@@ -231,6 +234,7 @@ if opt.evaluation_dir != "None":
                                                 lm_in_eval,
                                                 data_dict_eval,
                                                 pose_weight,
+                                                scope_name,
                                                 is_training=opt.training
                                                 )
         #pose_loss = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*500), lambda:pose_loss,lambda:0.0)#est_pose(tf.greater(global_step,tf.ones([],tf.int32)*5000),m_trainer,output,data_dict)

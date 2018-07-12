@@ -50,16 +50,18 @@ def training(opt,m_trainer,losses,losses_eval,
         tf.summary.histogram("{}-grad".format(grads[-2][1].name), grads[-2])
 
         
-        train_op = slim.learning.create_train_op(losses[0], optim)#,variables_to_train=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, m_trainer.scope_name))
-
+        train_op = slim.learning.create_train_op(losses[0], optim)
+        
     #Start training
     with tf.name_scope("parameter_count"):
         parameter_count = tf.reduce_sum([tf.reduce_prod(tf.shape(v)) \
                                         for v in tf.trainable_variables()])
 
-    # model_vars = collect_vars(m_trainer.scope_name)
-    # model_vars['global_step'] = global_step
-    saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+    model_vars = collect_vars(m_trainer.scope_name)
+    model_vars['global_step'] = global_step
+    saver = tf.train.Saver()
+
+    saver_lmnet = tf.train.Saver(model_vars)
 
     # if opt.domain_transfer_dir!="None":
     #     model_fix = collect_vars("fixnet")
@@ -90,7 +92,7 @@ def training(opt,m_trainer,losses,losses_eval,
             else:
                 checkpoint = opt.init_checkpoint_file
             print("Resume training from previous checkpoint: %s" % checkpoint)
-            saver.restore(sess, checkpoint)
+            saver_lmnet.restore(sess, checkpoint)
             # if opt.domain_transfer_dir!="None":
             #     saver_fix.restore(sess,checkpoint)
 
@@ -102,7 +104,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 fetches = {
                     "train":train_op,
                     "global_step": global_step,
-                    "incr_global_step": incr_global_step
+                    #"incr_global_step": incr_global_step
                 }
 
                 if opt.domain_transfer_dir!="None" and opt.with_dom:
@@ -112,7 +114,7 @@ def training(opt,m_trainer,losses,losses_eval,
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = losses[0]
                     fetches["summary"] = merged
-                    #fetches["gt3d"] = coord_pair
+                    #fetches["gt3d"] = losses[5]
                     # fetches["pred3d"]= pred_lm_3D
 
                     if opt.evaluation_dir != "None":

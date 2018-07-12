@@ -66,6 +66,7 @@ class pose_estimate:
                         output_img)        
         tf.summary.image('tgt' , \
                         image)
+        self.output_img = output_img
 
     def est_pose(self,landmark1,landmark2):
 
@@ -78,7 +79,7 @@ class pose_estimate:
         return R1,T1
 
 
-    def process_pose_est(self,landmark1,landmark2,pred_cam_coord1,gt_cam_coord2,pred_cam_coord2,gt_cam_coord1,depth1,depth2,data_dict,pose_weight):
+    def process_pose_est(self,landmark1,landmark2,pred_cam_coord1,gt_cam_coord2,pred_cam_coord2,gt_cam_coord1,depth1,depth2,data_dict,pose_weight,scope_name):
 
         rotation_loss = 0.0
         if self.trainer.opt.with_geo:
@@ -132,7 +133,7 @@ class pose_estimate:
 
 
 
-    def forward_wrapper(self,output,data_dict,pose_weight,is_training=True):
+    def forward_wrapper(self,output,data_dict,pose_weight,scope_name="pose",is_training=True):
         '''
         A wrapper function for domain transfer.
         Generate dataloader, model, loss and its own summary
@@ -192,7 +193,8 @@ class pose_estimate:
                                                     gt_cam_coord1,
                                                     depth1,depth2,
                                                     data_dict,
-                                                    pose_weight)
+                                                    pose_weight,
+                                                    scope_name)
 
         transformation_loss = tf.cond(tf.logical_and(tf.greater(usable_points1,tf.ones([],tf.int32)*5),
                                                     tf.greater(usable_points2,tf.ones([],tf.int32)*5)
@@ -204,7 +206,7 @@ class pose_estimate:
 
 
 
-        coord_pair = [landmark1,landmark2]
+        coord_pair = [self.output_img,data_dict['image'][1,:,:,:]]
 
 
 

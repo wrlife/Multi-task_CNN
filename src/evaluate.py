@@ -87,11 +87,14 @@ def evaluate(opt,
         pa=0;ma=0;mi=0;fwi=0;
         # model_vars = collect_vars(m_trainer.scope_name)
         # model_vars['global_step'] = global_step
-        saver = tf.train.Saver()
-
+        saver1 = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=m_trainer.scope_name))#tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+        saver2 = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pose_net"))
         #import pdb;pdb.set_trace()
-        checkpoint = tf.train.latest_checkpoint(opt.checkpoint_dir)
-        saver.restore(sess, checkpoint)
+        checkpoint1 = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.0001_lr2_0.001_numEncode5_numFeatures32/model-41002"#tf.train.latest_checkpoint(opt.checkpoint_dir)
+        checkpoint2 =  "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single_pose_geo_prepose/lr1_1e-05_lr2_0.001_numEncode5_numFeatures32_small_notlearnsoft/model-68001"
+        #print("Resume training from previous checkpoint: %s" % checkpoint)
+        saver1.restore(sess, checkpoint1)
+        saver2.restore(sess, checkpoint2)
         count=0
 
         avg_trans_error = 0.0  # point to point registered error
@@ -126,7 +129,7 @@ def evaluate(opt,
                     "visibility": data_dict["visibility"],
                     "global_step": global_step,
                     "trans_loss": losses[4],
-                    #"points1": coord_pair[0],
+                    "images": coord_pair,
                     #"proj_img": coord_pair[1]
                 }
                 fetches["summary"] = merged
@@ -145,9 +148,10 @@ def evaluate(opt,
                 gs = results["global_step"]
                 test_writer.add_summary(results["summary"],gs)
 
-                # if opt.proj_img:
-                #     cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["proj_img"][0]+0.5)*255)
-                #     cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][0]+0.5)*255)
+                #import pdb;pdb.set_trace()
+                if opt.proj_img:
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["images"][0][0,:,:,:]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][1]+0.5)*255)
                 #     cv2.imwrite(os.path.join('./test','proj_tgt'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
@@ -256,7 +260,7 @@ def evaluate(opt,
     
         #Generate graph and statistics
         #Sensitivity of non-occlude points
-        #mport pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         recall = (TP+eps)/(TP+FN+eps)
         recall_overall = np.sum(TP)/(np.sum(TP)+np.sum(FN))
         
