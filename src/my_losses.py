@@ -29,12 +29,12 @@ def argmax_2d(tensor):
 
 
 def softargmax(tensor):
-    B,H,W,D = landmark1.get_shape().as_list()
+    B,H,W,D = tensor.get_shape().as_list()
     norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
     lm_coord = tf.reverse(
                           tf.transpose(
                                        tf.reshape(
-                                                  (tf.contrib.layers.spatial_softmax(pred_landmark,temperature=1.0,trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+                                                  (tf.contrib.layers.spatial_softmax(tensor,temperature=1.0,trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
     return lm_coord
 
 
@@ -138,7 +138,7 @@ def compute_loss(output,data_dict,FLAGS):
 
     else:
         #import pdb;pdb.set_trace()
-        if FLAGS.with_lm:
+        if FLAGS.with_hm:
             lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
             lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
             lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
@@ -147,10 +147,14 @@ def compute_loss(output,data_dict,FLAGS):
 
             landmark = landmark*lm3d_weights
             landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
-        elif FLAGS.with_lm_coord:
+        
+        if FLAGS.with_lmcoord:
+            _,H,W,D = pred_landmark.get_shape().as_list()
+            pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
             lm_coord = softargmax(pred_landmark)
-            gt_coord = tf.reverse(argmax_2d(landmark),[1])
-            landmark_loss = l2loss_mean(gt_coord,lm_coord)*landmark_weight
+            gt_coord = tf.cast(tf.reverse(argmax_2d(landmark),[1]),dtype=tf.float32)
+            landmark_loss = landmark_loss+l2loss_mean(gt_coord,lm_coord)#*landmark_weight
+
         elif FLAGS.with_coordconv:
             pred_landmark_coord = CoordinateChannel2D()(pred_landmark)
             cnv_flat = tf.reshape(pred_landmark_coord, 
@@ -160,8 +164,8 @@ def compute_loss(output,data_dict,FLAGS):
             lm_coord = tf.layers.dense(inputs=cnv_flat, units=28, activation=None)
             gt_coord = data_dict['pixel_coords']
             #gt_coord = tf.reverse(argmax_2d(landmark),[1])
-            landmark_loss = l2loss_mean(gt_coord,lm_coord)*landmark_weight
-            
+            landmark_loss = landmark_loss+l2loss_mean(gt_coord,lm_coord)#*landmark_weight
+
 
     #Geometric loss
     # if FLAGS.with_geo:

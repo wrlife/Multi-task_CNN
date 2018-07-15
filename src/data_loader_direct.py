@@ -171,7 +171,7 @@ class DataLoader(object):
             # in memory. The parameter is the number of elements in the buffer. For
             # completely uniform shuffling, set the parameter to be the same as the
             # number of elements in the dataset.
-            dataset = dataset.shuffle(10)#1000 + 3 * batch_size)
+            dataset = dataset.shuffle(100)#1000 + 3 * batch_size)
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
             #if with_aug is not None:

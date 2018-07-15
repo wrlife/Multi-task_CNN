@@ -60,8 +60,8 @@ flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
 flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
 flags.DEFINE_boolean("with_H", False, "with homography estimation")
 flags.DEFINE_boolean("with_DH", False, "with homography estimation")
-flags.DEFINE_boolean("with_lm", True, "with homography estimation")
-flags.DEFINE_boolean("with_lm_coord", False, "with homography estimation")
+flags.DEFINE_boolean("with_hm", True, "with homography estimation")
+flags.DEFINE_boolean("with_lmcoord", False, "with homography estimation")
 flags.DEFINE_boolean("with_coordconv", False, "with homography estimation")
 flags.DEFINE_boolean("cycle_consist", False, "with cycle consistency")
 
@@ -89,7 +89,9 @@ if opt.with_dist:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dist"
 if opt.cycle_consist:
     opt.checkpoint_dir = opt.checkpoint_dir+"_cyc"
-if opt.with_lm_coord:
+if opt.with_hm:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_hm"
+if opt.with_lmcoord:
     opt.checkpoint_dir = opt.checkpoint_dir+"_lmcoord"
 if opt.with_coordconv:
     opt.checkpoint_dir = opt.checkpoint_dir+"_coordconv"
@@ -168,9 +170,9 @@ if opt.pretrain_pose:
     if opt.with_DH:
 
         m_pose_est = DH_estimate(m_trainer)
-        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*1000), lambda:output[0],lambda:data_dict["points2D"])
-        output=data_dict["points2D"]
-        #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
+        
+        output=data_dict["points2D"]#data_dict["points2D"]
+        
         pose_loss,coord_pair = m_pose_est.forward_wrapper(
                                                 output,
                                                 data_dict,

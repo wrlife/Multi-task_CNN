@@ -61,7 +61,7 @@ def training(opt,m_trainer,losses,losses_eval,
     model_vars['global_step'] = global_step
     saver = tf.train.Saver()
 
-    saver_lmnet = tf.train.Saver(model_vars)
+    saver_lmnet = tf.train.Saver()#model_vars)
 
     # if opt.domain_transfer_dir!="None":
     #     model_fix = collect_vars("fixnet")
