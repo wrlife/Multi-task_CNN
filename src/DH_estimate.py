@@ -52,7 +52,7 @@ class DH_estimate:
                                 ) 
         H_gt,H_flat = utlr.solve_DLT(pts1,pts2)
 
-        #import pdb;pdb.set_trace()
+
         ones = tf.ones([tf.shape(fixed_points)[0], 1, tf.shape(fixed_points)[2]])
         fixed_points_pad = tf.concat([tf.cast(fixed_points,tf.float32),ones],axis=1)        
         warped_points = tf.matmul(H_gt,fixed_points_pad)
