@@ -5,6 +5,8 @@ from tensorflow.contrib.layers.python.layers import utils
 import numpy as np
 
 
+
+
 # Range of disparity/inverse depth values
 DISP_SCALING = 100.0
 MIN_DISP = 0

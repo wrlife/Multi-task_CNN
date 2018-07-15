@@ -59,6 +59,8 @@ class DataLoader(object):
                     'landmark_heatmap': tf.FixedLenFeature([], tf.string),
                     'visibility': tf.FixedLenFeature([], tf.string),
                     'matK': tf.FixedLenFeature([], tf.string),
+                    'H': tf.FixedLenFeature([], tf.string),
+                    'points2D': tf.FixedLenFeature([], tf.string),
                 })
 
             # Convert from a scalar string tensor (whose single string has
@@ -73,6 +75,8 @@ class DataLoader(object):
             points2D = tf.decode_raw(features['landmark_heatmap'], tf.float32)
             visibility = tf.decode_raw(features['visibility'], tf.float32)
             matK = tf.decode_raw(features['matK'], tf.float64)
+            H = tf.decode_raw(features['H'], tf.float64)
+            pixel_coords = tf.decode_raw(features['points2D'], tf.float64)
 
             image =  tf.cast(tf.reshape(image,[self.image_height, self.image_width, 3]),tf.float32)/255.0-0.5
 
@@ -95,6 +99,8 @@ class DataLoader(object):
             div = tf.tile(tf.expand_dims(tf.expand_dims(tf.reduce_max(points2D,[0,1])+0.0000001,axis=0),axis=1),[self.image_height,self.image_width,1])
             points2D = points2D/div
             #points2D = points2D*(self.image_height*self.image_width)
+
+            pixel_coords = tf.cast(tf.reshape(pixel_coords,[2,28]),dtype=tf.float32)
 
             if self.opt.downsample:
                 image = tf.image.resize_images(image,[224,224])
@@ -121,6 +127,7 @@ class DataLoader(object):
             data_dict['points2D'] = points2D
             data_dict['visibility'] = visibility
             data_dict['matK'] = matK
+            data_dict['pixel_coords'] = pixel_coords
 
             return data_dict
 
@@ -164,11 +171,11 @@ class DataLoader(object):
             # in memory. The parameter is the number of elements in the buffer. For
             # completely uniform shuffling, set the parameter to be the same as the
             # number of elements in the dataset.
-            dataset = dataset.shuffle(1000)#1000 + 3 * batch_size)
+            dataset = dataset.shuffle(10)#1000 + 3 * batch_size)
             dataset = dataset.repeat(num_epochs)
             dataset = dataset.batch(batch_size)
             #if with_aug is not None:
-            dataset = dataset.map(augment)
+            #dataset = dataset.map(augment)
 
             iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()

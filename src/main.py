@@ -12,6 +12,7 @@ from estimator_rui import *
 from domain_trans import *
 from pose_estimate import *
 from H_estimate import *
+from DH_estimate import *
 from training import *
 from evaluate import *
 from prediction import *
@@ -58,7 +59,10 @@ flags.DEFINE_boolean("cycleGAN", False, "if False, start cyclegan")
 flags.DEFINE_boolean("pretrain_pose", False, "if False, start cyclegan")
 flags.DEFINE_boolean("proj_img", False, "if False, dont project image")
 flags.DEFINE_boolean("with_H", False, "with homography estimation")
+flags.DEFINE_boolean("with_DH", False, "with homography estimation")
 flags.DEFINE_boolean("with_lm", True, "with homography estimation")
+flags.DEFINE_boolean("with_lm_coord", False, "with homography estimation")
+flags.DEFINE_boolean("with_coordconv", False, "with homography estimation")
 flags.DEFINE_boolean("cycle_consist", False, "with cycle consistency")
 
 
@@ -73,6 +77,8 @@ if opt.with_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_pose"
 if opt.with_H:
     opt.checkpoint_dir = opt.checkpoint_dir+"_H"
+if opt.with_DH:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_DH"
 if opt.with_noise:
     opt.checkpoint_dir = opt.checkpoint_dir+"_noise"
 if opt.with_vis:
@@ -83,6 +89,10 @@ if opt.with_dist:
     opt.checkpoint_dir = opt.checkpoint_dir+"_dist"
 if opt.cycle_consist:
     opt.checkpoint_dir = opt.checkpoint_dir+"_cyc"
+if opt.with_lm_coord:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_lmcoord"
+if opt.with_coordconv:
+    opt.checkpoint_dir = opt.checkpoint_dir+"_coordconv"
 if opt.pretrain_pose:
     opt.checkpoint_dir = opt.checkpoint_dir+"_prepose"
 if opt.domain_transfer_dir!="None" and opt.with_dom:
@@ -98,7 +108,7 @@ if not os.path.exists(opt.checkpoint_dir):
 #opt.checkpoint_dir = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.004_lr2_0.001_numEncode5_numFeatures32_thhm/"
 
 write_params(opt)
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+#os.environ["CUDA_VISIBLE_DEVICES"]="1"
 #==========================
 #Define a estimator instance
 #Estimator wraps dataloader, 
@@ -136,21 +146,45 @@ if opt.pretrain_pose:
                                     opt.max_steps,
                                     with_dataaug=opt.data_aug)
 
-    
-    output=data_dict["points2D"]
-    m_pose_est_pretrain = pose_estimate(m_trainer)
-    pose_loss,coord_pair = m_pose_est_pretrain.forward_wrapper(
-                                            output,
-                                            data_dict,
-                                            pose_weight,
-                                            is_training=opt.training
-                                            )
+    #==========================
+    #Forward path for pose 
+    # estimation
+    #==========================
+    if opt.with_H:
+
+        output=data_dict["points2D"]
+        m_pose_est_pretrain = pose_estimate(m_trainer)
+        pose_loss,coord_pair = m_pose_est_pretrain.forward_wrapper(
+                                                output,
+                                                data_dict,
+                                                pose_weight,
+                                                is_training=opt.training
+                                                )
+
+    #==========================
+    #Forward path for pose 
+    # estimation
+    #==========================
+    if opt.with_DH:
+
+        m_pose_est = DH_estimate(m_trainer)
+        #lm_in = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*1000), lambda:output[0],lambda:data_dict["points2D"])
+        output=data_dict["points2D"]
+        #pose_weight = tf.cond(tf.greater(global_step,tf.ones([],tf.int32)*5000), lambda:1.0/50000.0,lambda:1.0)
+        pose_loss,coord_pair = m_pose_est.forward_wrapper(
+                                                output,
+                                                data_dict,
+                                                pose_weight
+                                                )
+
     losses = []
     losses.append(pose_loss)
     losses.append(pose_loss)
     losses.append(pose_loss)
     losses.append(pose_loss)
     losses.append(pose_loss)
+
+
     
 
 

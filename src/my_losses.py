@@ -2,7 +2,7 @@ from __future__ import division
 import tensorflow as tf
 import numpy as np
 import tfquaternion as tfq
-
+from coordconv import CoordinateChannel2D
 
 def rank(tensor):
 
@@ -26,6 +26,17 @@ def argmax_2d(tensor):
     
     # stack and return 2D coordinates
     return tf.stack((argmax_x, argmax_y), axis=1)
+
+
+def softargmax(tensor):
+    B,H,W,D = landmark1.get_shape().as_list()
+    norm_to_regular = tf.concat([tf.ones([B,D,1])*H, tf.ones([B,D,1])*W],axis=2)
+    lm_coord = tf.reverse(
+                          tf.transpose(
+                                       tf.reshape(
+                                                  (tf.contrib.layers.spatial_softmax(pred_landmark,temperature=1.0,trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+    return lm_coord
+
 
 def l2loss(label,pred,v_weight=None):
     diff = label-pred
@@ -136,7 +147,21 @@ def compute_loss(output,data_dict,FLAGS):
 
             landmark = landmark*lm3d_weights
             landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
-    
+        elif FLAGS.with_lm_coord:
+            lm_coord = softargmax(pred_landmark)
+            gt_coord = tf.reverse(argmax_2d(landmark),[1])
+            landmark_loss = l2loss_mean(gt_coord,lm_coord)*landmark_weight
+        elif FLAGS.with_coordconv:
+            pred_landmark_coord = CoordinateChannel2D()(pred_landmark)
+            cnv_flat = tf.reshape(pred_landmark_coord, 
+                                 [-1, pred_landmark_coord.get_shape()[1].value
+                                      *pred_landmark_coord.get_shape()[2].value
+                                      *pred_landmark_coord.get_shape()[3].value])
+            lm_coord = tf.layers.dense(inputs=cnv_flat, units=28, activation=None)
+            gt_coord = data_dict['pixel_coords']
+            #gt_coord = tf.reverse(argmax_2d(landmark),[1])
+            landmark_loss = l2loss_mean(gt_coord,lm_coord)*landmark_weight
+            
 
     #Geometric loss
     # if FLAGS.with_geo:
