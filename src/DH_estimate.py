@@ -63,7 +63,7 @@ class DH_estimate:
         input_geo = tf.concat([landmark1,landmark2],axis=3)
         pred_shift = disp_net_pose(input_geo, num_encode=7,is_training=self.is_training)
 
-        pred_points = fixed_points-tf.reshape(gt_shift,[-1,2,4])
+        pred_points = fixed_points-tf.reshape(pred_shift,[-1,2,4])
         H_pred,H_flat_pred = utlr.solve_DLT(fixed_points,pred_points)
 
         if self.trainer.opt.proj_img:
