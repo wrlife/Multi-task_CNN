@@ -4,6 +4,7 @@ import pprint
 import random
 import numpy as np
 import os, glob
+import utils_lr as utlr
 
 
 class DataLoader(object):
@@ -129,6 +130,8 @@ class DataLoader(object):
             data_dict['matK'] = matK
             data_dict['pixel_coords'] = pixel_coords
 
+            data_dict = self.data_augmentation2(data_dict,self.image_height,self.image_width)
+
             return data_dict
 
         def augment(data_dict):
@@ -150,7 +153,8 @@ class DataLoader(object):
             data_dict['matK'] = matK
             
             return data_dict
-            
+        def augment2(data_dict):
+            data_dict = self.data_augmentation2(data_dict,self.image_height,self.image_width)
 
         if not num_epochs:
             num_epochs = None
@@ -164,7 +168,7 @@ class DataLoader(object):
             # The map transformation takes a function and applies it to every element
             # of the dataset.
             dataset = dataset.map(decode)
-            # dataset = dataset.map(augment)
+            #dataset = dataset.map(augment2)
             # dataset = dataset.map(normalize)
 
             # The shuffle transformation uses a finite-sized buffer to shuffle elements
@@ -540,4 +544,67 @@ class DataLoader(object):
         #return ir, image, depth, label,landmark
 
         
+
+    def data_augmentation2(self, data_dict, out_h, out_w):
+
+        def random_rotate(data_dict):
+            #import pdb;pdb.set_trace()
+            angle = tf.random_uniform([1], -np.pi, np.pi, dtype=tf.float32)[0]
+            data_dict['IR'] = tf.contrib.image.rotate(data_dict['IR'],angle)
+            data_dict['image'] = tf.contrib.image.rotate(data_dict['image'],angle)
+            data_dict['points2D'] = tf.contrib.image.rotate(data_dict['points2D'],angle)
+            center = tf.tile(tf.expand_dims(tf.stack([tf.to_float(self.image_width/2.0),tf.to_float(self.image_height/2.0)]),axis=1),[1,data_dict['pixel_coords'].get_shape()[1]])
+            temppoint = data_dict['pixel_coords']-center
+            temppoint = utlr.rotate(temppoint, -angle)
+            data_dict['pixel_coords'] = temppoint+center
+            return data_dict
+
+        
+        # Random scaling
+        def random_scaling(data_dict):
+            in_h, in_w, _ = data_dict['IR'].get_shape().as_list()
+            scaling = tf.random_uniform([2], 1, 1.15)
+            x_scaling = scaling[0]
+            y_scaling = scaling[1]
+            out_h = tf.cast(in_h * y_scaling, dtype=tf.int32)
+            out_w = tf.cast(in_w * x_scaling, dtype=tf.int32)
+
+            data_dict['IR'] = tf.image.resize_images(data_dict['IR'], [out_h, out_w])
+            data_dict['image'] = tf.image.resize_images(data_dict['image'], [out_h, out_w])
+            data_dict['points2D'] = tf.image.resize_images(data_dict['points2D'], [out_h, out_w])
+            return data_dict
+
+
+        # Random cropping
+        def random_cropping(data_dict):
+
+            # batch_size, in_h, in_w, _ = im.get_shape().as_list()
+            in_h, in_w, _ = tf.unstack(tf.shape(data_dict['IR']))
+            offset_y = tf.random_uniform([1], 0, in_h - out_h + 1, dtype=tf.int32)[0]
+            offset_x = tf.random_uniform([1], 0, in_w - out_w + 1, dtype=tf.int32)[0]
+
+            _in_h = tf.to_float(in_h)
+            _in_w = tf.to_float(in_w)
+            _out_h = tf.to_float(out_h)
+            _out_w = tf.to_float(out_w)
+
+            ratio = tf.tile(tf.expand_dims(tf.stack([tf.to_float(_in_w/_out_w),tf.to_float(_in_h/_out_h)]),axis=1),[1,data_dict['pixel_coords'].get_shape()[1]])
+            offsets = tf.tile(tf.expand_dims(tf.stack([tf.to_float(offset_x),tf.to_float(offset_y)]),axis=1),[1,data_dict['pixel_coords'].get_shape()[1]])
+
+            data_dict['pixel_coords'] = data_dict['pixel_coords']*ratio-offsets
+
+            data_dict['IR'] = tf.image.crop_to_bounding_box(
+                data_dict['IR'], offset_y, offset_x, out_h, out_w)
+            data_dict['image'] = tf.image.crop_to_bounding_box(
+                data_dict['image'], offset_y, offset_x, out_h, out_w)
+            data_dict['points2D'] = tf.image.crop_to_bounding_box(
+                data_dict['points2D'], offset_y, offset_x, out_h, out_w)
+            return data_dict
+                
+        data_dict=random_rotate(data_dict)
+        data_dict=random_scaling(data_dict)
+        data_dict=random_cropping(data_dict)
+
+        return data_dict
+
 

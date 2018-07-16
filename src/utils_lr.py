@@ -117,6 +117,13 @@ Aux_Mb  = np.array([
           [0 , 0 , 0 , 0  , 0 , 0 , 0 ,-1 ],
           [0 , 0 , 0 , 0  , 0 , 0 , 1 , 0 ]], dtype=np.float64)
 
+def rotate(points, theta):
+    rotation_matrix = tf.stack([tf.cos(theta),
+                              -tf.sin(theta),  
+                               tf.sin(theta),
+                               tf.cos(theta)])
+    rotation_matrix = tf.reshape(rotation_matrix, (2,2))
+    return tf.matmul(rotation_matrix,points)
 
 def gray2rgb(im, cmap='gray'):
     cmap = plt.get_cmap(cmap)
