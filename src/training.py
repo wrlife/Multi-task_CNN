@@ -114,6 +114,9 @@ def training(opt,m_trainer,losses,losses_eval,
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = losses[0]
                     fetches["summary"] = merged
+                    fetches["gt_coord"] = losses[5]
+                    fetches["pred_coord"] = losses[6]
+                    #fetches["gt3d"] = coord_pair
                     #fetches["gt3d"] = losses[5]
                     # fetches["pred3d"]= pred_lm_3D
 
@@ -133,9 +136,8 @@ def training(opt,m_trainer,losses,losses_eval,
                     print('Step %d: loss = %.2f (%.3f sec)' % (step, results["loss"],
                                                             duration))
                     
-                    #import pdb;pdb.set_trace()
-                    #print(results["gt3d"][0])
-                    #print(results["gt3d"][1])
+                    print(results["gt_coord"][0,:,1])
+                    print(results["pred_coord"][0,:,1])
                     # print(results["gt3d"][2])
                     # print(results["gt3d"][3])
                     if opt.evaluation_dir != "None":

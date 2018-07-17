@@ -2,7 +2,7 @@ from __future__ import division
 import tensorflow as tf
 import numpy as np
 import tfquaternion as tfq
-from coordconv import CoordinateChannel2D
+from model import *
 
 def rank(tensor):
 
@@ -34,7 +34,7 @@ def softargmax(tensor):
     lm_coord = tf.reverse(
                           tf.transpose(
                                        tf.reshape(
-                                                  (tf.contrib.layers.spatial_softmax(tensor,temperature=1.0,trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+                                                  (tf.contrib.layers.spatial_softmax(tensor,temperature=1.0/(H*W),trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
     return lm_coord
 
 
@@ -139,32 +139,51 @@ def compute_loss(output,data_dict,FLAGS):
     else:
         #import pdb;pdb.set_trace()
         if FLAGS.with_hm:
+            _,H,W,D = pred_landmark.get_shape().as_list()
             lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
             lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
             lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
             #import pdb;pdb.set_trace()
             lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
-
             landmark = landmark*lm3d_weights
-            landmark_loss = l2loss_mean(landmark,pred_landmark)*landmark_weight
+
+            features = tf.reshape(tf.transpose(pred_landmark, [0, 3, 1, 2]), [FLAGS.batch_size * D, H * W])
+            softmax = tf.nn.softmax(features)
+            # Reshape and transpose back to original format.
+            softmax = tf.transpose(tf.reshape(softmax, [FLAGS.batch_size , D, H, W]), [0, 2, 3, 1])
+
+
+            landmark_loss = l2loss_mean(landmark,softmax)*landmark_weight
         
         if FLAGS.with_lmcoord:
+            #import pdb;pdb.set_trace()
+            lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+            lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
+            lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
+            #import pdb;pdb.set_trace()
+            lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
+            landmark = landmark*lm3d_weights
+            
+
             _,H,W,D = pred_landmark.get_shape().as_list()
+            landmark.set_shape([FLAGS.batch_size,H,W,D])
             pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
             lm_coord = softargmax(pred_landmark)
-            gt_coord = tf.cast(tf.reverse(argmax_2d(landmark),[1]),dtype=tf.float32)
-            landmark_loss = landmark_loss+l2loss_mean(gt_coord,lm_coord)#*landmark_weight
+            gt_coord = softargmax(landmark)
+            
+            landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord)#*landmark_weight
 
         elif FLAGS.with_coordconv:
-            pred_landmark_coord = CoordinateChannel2D()(pred_landmark)
-            cnv_flat = tf.reshape(pred_landmark_coord, 
-                                 [-1, pred_landmark_coord.get_shape()[1].value
-                                      *pred_landmark_coord.get_shape()[2].value
-                                      *pred_landmark_coord.get_shape()[3].value])
-            lm_coord = tf.layers.dense(inputs=cnv_flat, units=28, activation=None)
+            lm_coord = tf.reshape(output[1],[-1,2,28])
+
+            B,H,W,D = landmark.get_shape().as_list()
+
             gt_coord = data_dict['pixel_coords']
+            
+            lm_coord = tf.concat([tf.expand_dims((lm_coord[:,0,:]+1)/2.0*tf.to_float(W),axis=1),
+                                 tf.expand_dims((lm_coord[:,1,:]+1)/2.0*tf.to_float(H),axis=1)],axis=1)
             #gt_coord = tf.reverse(argmax_2d(landmark),[1])
-            landmark_loss = landmark_loss+l2loss_mean(gt_coord,lm_coord)#*landmark_weight
+            landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord)#*landmark_weight
 
 
     #Geometric loss
@@ -200,7 +219,7 @@ def compute_loss(output,data_dict,FLAGS):
 
     total_loss = depth_loss+landmark_loss+vis_loss+geo_loss+dist_loss
 
-    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss#,test
+    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss,gt_coord,lm_coord
 
 
 

@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.contrib.layers.python.layers import utils
 import numpy as np
-
+from coordconv import CoordinateChannel2D
 
 
 
@@ -31,6 +31,34 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, with_w=
     else:
       return tf.matmul(input_, matrix) + bias
 
+def conv_fully_encoder(num_encode,input_,num_features,max_features=512,with_b = False):
+    '''
+    Convolutional encoder
+    '''
+
+    cnv_layers = []
+    #import pdb;pdb.set_trace()
+    for i in range(num_encode):
+
+        #Upper bound for max number of features
+        if num_features*(2**i)>max_features:
+            curr_features = max_features
+        else:
+            curr_features = num_features*(2**i)
+        cnv = slim.conv2d(input_[:,:,:,:], curr_features,  [3, 3], stride=2, scope='cnv'+str(i+1))
+        if with_b:
+            cnvb = slim.conv2d(cnv, curr_features,  [3, 3], stride=1, scope='cnv'+str(i+1)+'b')
+            input_ = cnvb
+            cnv_layers.append(cnvb)
+        else:
+            input_ = cnv
+            cnv_layers.append(cnv)
+
+    cnv_flat = tf.reshape(cnv_layers[-1], [-1, cnv_layers[-1].get_shape()[1].value*cnv_layers[-1].get_shape()[2].value*cnv_layers[-1].get_shape()[3].value])
+    fc1 = tf.layers.dense(inputs=cnv_flat, units=max_features*2, activation=tf.nn.leaky_relu)
+    output = tf.layers.dense(inputs=fc1, units=56, activation=None)
+    output = tf.reshape(output,[-1,2,28])
+    return output
 
 def conv_encoder(num_encode,input_,num_features,max_features=512,with_b = True):
     '''
@@ -278,6 +306,45 @@ def disp_net_pose(tgt_image, num_encode, num_features=32, is_training=True):
             pose_final = tf.layers.dense(inputs=fc1, units=8, activation=None)
 
             return pose_final
+
+def disp_net_coord(tgt_image, is_training=True):
+    batch_norm_params = {'is_training': is_training,'decay':0.9}
+    H = tgt_image.get_shape()[1].value
+    W = tgt_image.get_shape()[2].value
+    max_features=512
+    with tf.variable_scope('pose_net',reuse = tf.AUTO_REUSE) as sc:
+        end_points_collection = sc.original_name_scope + '_end_points'
+        with slim.arg_scope([slim.conv2d, slim.conv2d_transpose],
+                            normalizer_fn=slim.batch_norm,
+                            normalizer_params=batch_norm_params,
+                            weights_regularizer=slim.l2_regularizer(0.05),
+                            activation_fn=tf.nn.leaky_relu,
+                            outputs_collections=end_points_collection):
+            #import pdb;pdb.set_trace()
+            tgt_image = CoordinateChannel2D()(tgt_image)
+            cnv1  = slim.conv2d(tgt_image[:,:,:,:], 32,  [7, 7], stride=2, scope='cnv1')
+            cnv1b = slim.conv2d(cnv1,  32,  [7, 7], stride=1, scope='cnv1b')
+            cnv2  = slim.conv2d(cnv1b, 64,  [5, 5], stride=2, scope='cnv2')
+            cnv2b = slim.conv2d(cnv2,  64,  [5, 5], stride=1, scope='cnv2b')
+            cnv2b = CoordinateChannel2D()(cnv2b)
+            cnv3  = slim.conv2d(cnv2b[:,:,:,:], 128, [3, 3], stride=2, scope='cnv3')
+            cnv3b = slim.conv2d(cnv3,  128, [3, 3], stride=1, scope='cnv3b')
+            cnv4  = slim.conv2d(cnv3b, 256, [3, 3], stride=2, scope='cnv4')
+            cnv4b = slim.conv2d(cnv4,  256, [3, 3], stride=1, scope='cnv4b')
+            cnv4b = CoordinateChannel2D()(cnv4b)
+            cnv5  = slim.conv2d(cnv4b[:,:,:,:], 512, [3, 3], stride=2, scope='cnv5')
+            cnv5b = slim.conv2d(cnv5,  512, [3, 3], stride=1, scope='cnv5b')
+            cnv6  = slim.conv2d(cnv5b, 512, [3, 3], stride=2, scope='cnv6')
+            cnv6b = slim.conv2d(cnv6,  512, [3, 3], stride=1, scope='cnv6b')
+            cnv7  = slim.conv2d(cnv6b, 512, [3, 3], stride=2, scope='cnv7')
+            cnv7b = slim.conv2d(cnv7,  512, [3, 3], stride=1, scope='cnv7b') 
+            
+            cnv_flat = tf.reshape(cnv7b, [-1, cnv7b.get_shape()[1].value*cnv7b.get_shape()[2].value*cnv7b.get_shape()[3].value])
+            fc1 = tf.layers.dense(inputs=cnv_flat, units=max_features*2, activation=tf.nn.leaky_relu)
+            coord_final = tf.layers.dense(inputs=fc1, units=56, activation=None)
+
+            return cnv3b[:,:,:,0:28],coord_final
+
 
 
 def disp_net_initial(tgt_image, is_training=True, is_reuse=False):

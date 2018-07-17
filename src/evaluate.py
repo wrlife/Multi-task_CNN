@@ -87,13 +87,13 @@ def evaluate(opt,
         pa=0;ma=0;mi=0;fwi=0;
         # model_vars = collect_vars(m_trainer.scope_name)
         # model_vars['global_step'] = global_step
-        saver1 = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=m_trainer.scope_name))#tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
+        #saver1 = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=m_trainer.scope_name))#tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
         saver2 = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="pose_net"))
         #import pdb;pdb.set_trace()
-        checkpoint1 = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.0001_lr2_0.001_numEncode5_numFeatures32/model-41002"#tf.train.latest_checkpoint(opt.checkpoint_dir)
+        #checkpoint1 = "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single/lr1_0.0001_lr2_0.001_numEncode5_numFeatures32/model-41002"#tf.train.latest_checkpoint(opt.checkpoint_dir)
         checkpoint2 =  "/home/z003xr2y/data/Multi-task_CNN/src/checkpoints/IR_single_pose_geo_prepose/lr1_1e-05_lr2_0.001_numEncode5_numFeatures32_small_notlearnsoft/model-68001"
         #print("Resume training from previous checkpoint: %s" % checkpoint)
-        saver1.restore(sess, checkpoint1)
+        #saver1.restore(sess, checkpoint1)
         saver2.restore(sess, checkpoint2)
         count=0
 
@@ -150,8 +150,10 @@ def evaluate(opt,
 
                 #import pdb;pdb.set_trace()
                 if opt.proj_img:
-                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'.png'),(results["images"][0][0,:,:,:]+0.5)*255)
-                    cv2.imwrite(os.path.join('./test','proj_src'+str(count)+'.png'),(results["image"][1]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_p1.png'),(results["images"][0][0,:,:,:]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_t1.png'),(results["images"][1]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_p2.png'),(results["images"][2][0,:,:,:]+0.5)*255)
+                    cv2.imwrite(os.path.join('./test','proj'+str(count)+'_t2.png'),(results["images"][3]+0.5)*255)
                 #     cv2.imwrite(os.path.join('./test','proj_tgt'+str(count)+'.png'),(results["image"][1]+0.5)*255)
     
                 if opt.with_seg:
@@ -239,7 +241,7 @@ def evaluate(opt,
                     visibility[visibility>0.5] = 1.0
                     visibility[visibility<=0.5] = 0
                 #import pdb;pdb.set_trace()
-                drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
+                #drawlandmark((results["image"][0,:,:,:]+0.5)*255.0,points2D, os.path.join('./test','landmark'+str(count)+'.png'),results["visibility"][0,:])
                 count = count+1
 
                 print("The %s frame is processed"%(count))

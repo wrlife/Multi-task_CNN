@@ -101,6 +101,10 @@ class estimator_rui:
         elif self.opt.inputs =="depth":
             input_ts = data_dict['depth']
         
+        _,H,W,D = input_ts.get_shape().as_list()
+    
+        input_ts.set_shape([self.opt.batch_size,H,W,D])
+
         return input_ts
 
 
@@ -109,6 +113,7 @@ class estimator_rui:
         Model selection
         '''
         with tf.variable_scope(scope_name) as scope:
+            
             if self.opt.model=="lastdecode":
                 output = disp_net(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="single":
@@ -125,6 +130,8 @@ class estimator_rui:
                 output = disp_net_single_pose(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             elif self.opt.model=="multiscale":
                 output = disp_net_single_multiscale(tf.cast(input_ts,tf.float32),is_training,is_reuse)
+            elif self.opt.model=="coordconv":
+                output = disp_net_coord(tf.cast(input_ts,tf.float32), is_training)
             # elif self.opt.model=="hourglass":
             #     initial_output = disp_net_initial(tf.cast(input_ts,tf.float32),is_training,is_reuse)
             #     input_ts = tf.concat([input_ts,initial_output[1]],axis=3)
@@ -198,7 +205,7 @@ class estimator_rui:
                                 gt_landmark)
 
         pred_landmark = tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#tf.expand_dims(tf.reduce_sum(pred_landmark,3),axis=3)#tf.expand_dims(pred_landmark[:,:,:,random_landmark],axis=3)#
-        pred_landmark = tf.clip_by_value(pred_landmark,0.0,self.opt.img_height*self.opt.img_width)
+        #pred_landmark = tf.clip_by_value(pred_landmark,0.0,self.opt.img_height*self.opt.img_width)
         pred_landmark_sum = tf.summary.image('pred_lm_img' , \
                             pred_landmark)
         #return tf.summary.merge([total_loss,seg_loss,landmark_loss,transformation_loss,vis_loss,image,landmark_sum,pred_landmark_sum]) #
