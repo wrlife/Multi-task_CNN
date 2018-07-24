@@ -3,6 +3,8 @@ import tensorflow as tf
 import numpy as np
 import tfquaternion as tfq
 from model import *
+import utils_lr as utlr
+
 
 def rank(tensor):
 
@@ -34,7 +36,7 @@ def softargmax(tensor):
     lm_coord = tf.reverse(
                           tf.transpose(
                                        tf.reshape(
-                                                  (tf.contrib.layers.spatial_softmax(tensor,temperature=1.0/(H*W),trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
+                                                  (tf.contrib.layers.spatial_softmax(tensor,temperature=1.0/10.0,trainable=False)+1)/2.0,[B,D,2])*norm_to_regular,[0,2,1]),[1])
     return lm_coord
 
 
@@ -81,6 +83,19 @@ def pixel2cam(depth, pixel_coords, intrinsics, is_homogeneous=True):
 #     cam_coords = tf.concat([cam_coords, ones], axis=1)
   #cam_coords = tf.reshape(cam_coords, [batch, -1, height, width])
   return cam_coords
+
+
+
+
+def DH_transform(H,points):
+
+    ones = tf.ones([tf.shape(points)[0], 1, tf.shape(points)[2]])
+    pred_coord_pad = tf.concat([tf.cast(points,tf.float32),ones],axis=1)        
+    warped_points = tf.matmul(H,pred_coord_pad)
+    warped_points = warped_points/tf.tile(tf.expand_dims(warped_points[:,-1,:],axis=1),[1,3,1])
+            
+    return warped_points[:,0:2,:]
+
 
 
 def compute_loss(output,data_dict,FLAGS):
@@ -138,55 +153,97 @@ def compute_loss(output,data_dict,FLAGS):
 
     else:
         #import pdb;pdb.set_trace()
-        if FLAGS.with_hm:
-            _,H,W,D = pred_landmark.get_shape().as_list()
-            lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
-            lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
-            lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
-            #import pdb;pdb.set_trace()
-            lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
-            landmark = landmark*lm3d_weights
+        with tf.variable_scope('softmax',reuse = tf.AUTO_REUSE) as sm:
+            if FLAGS.with_hm:
+                _,H,W,D = pred_landmark.get_shape().as_list()
+                lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+                lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
+                lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
+                #import pdb;pdb.set_trace()
+                lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
+                landmark = landmark*lm3d_weights
 
-            features = tf.reshape(tf.transpose(pred_landmark, [0, 3, 1, 2]), [FLAGS.batch_size * D, H * W])
-            softmax = tf.nn.softmax(features)
-            # Reshape and transpose back to original format.
-            softmax = tf.transpose(tf.reshape(softmax, [FLAGS.batch_size , D, H, W]), [0, 2, 3, 1])
+                # features = tf.reshape(tf.transpose(pred_landmark, [0, 3, 1, 2]), [FLAGS.batch_size * D, H * W])
+                # softmax = tf.nn.softmax(features)
+                # # Reshape and transpose back to original format.
+                # softmax = tf.transpose(tf.reshape(softmax, [FLAGS.batch_size , D, H, W]), [0, 2, 3, 1])
 
-
-            landmark_loss = l2loss_mean(landmark,softmax)*landmark_weight
-        
-        if FLAGS.with_lmcoord:
-            #import pdb;pdb.set_trace()
-            lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
-            lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
-            lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
-            #import pdb;pdb.set_trace()
-            lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
-            landmark = landmark*lm3d_weights
+                landmark_loss = l2loss(landmark,pred_landmark)
             
+            if FLAGS.with_lmcoord:
+                #import pdb;pdb.set_trace()
+                lm3d_weights = tf.clip_by_value(visibility,0.0,1.0)
+                lm3d_weights = tf.expand_dims(lm3d_weights,axis=1)
+                lm3d_weights = tf.expand_dims(lm3d_weights,axis=2)
+                #import pdb;pdb.set_trace()
+                lm3d_weights = tf.tile(lm3d_weights,[1,FLAGS.img_height,FLAGS.img_width,1])
+                landmark = landmark*lm3d_weights
+                
 
-            _,H,W,D = pred_landmark.get_shape().as_list()
-            landmark.set_shape([FLAGS.batch_size,H,W,D])
-            pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
-            lm_coord = softargmax(pred_landmark)
-            gt_coord = softargmax(landmark)
-            
-            landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord)#*landmark_weight
+                _,H,W,D = pred_landmark.get_shape().as_list()
+                landmark.set_shape([FLAGS.batch_size,H,W,D])
+                pred_landmark.set_shape([FLAGS.batch_size,H,W,D])
+                lm_coord = softargmax(pred_landmark)
+                gt_coord = softargmax(landmark)
+                
+                landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord,lm3d_weights)#*landmark_weight
 
-        elif FLAGS.with_coordconv:
-            lm_coord = tf.reshape(output[1],[-1,2,28])
+            elif FLAGS.with_4pcoordconv:
+                lm_coord = tf.reshape(output[1],[-1,2,4])
+                
+                B,H,W,D = landmark.get_shape().as_list()
 
-            B,H,W,D = landmark.get_shape().as_list()
+                gt_coord = data_dict['pixel_coords']
+                gt_coord.set_shape([FLAGS.batch_size,2,D])
+                lm_coord = tf.concat([tf.expand_dims((lm_coord[:,0,:]+1)/2.0*tf.to_float(W),axis=1),
+                                    tf.expand_dims((lm_coord[:,1,:]+1)/2.0*tf.to_float(H),axis=1)],axis=1)
 
-            gt_coord = data_dict['pixel_coords']
-            
-            lm_coord = tf.concat([tf.expand_dims((lm_coord[:,0,:]+1)/2.0*tf.to_float(W),axis=1),
-                                 tf.expand_dims((lm_coord[:,1,:]+1)/2.0*tf.to_float(H),axis=1)],axis=1)
-            #gt_coord = tf.reverse(argmax_2d(landmark),[1])
-            landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord)#*landmark_weight
+                pts = tf.concat([tf.expand_dims(gt_coord[:,:,0],axis=2),
+                    tf.expand_dims(gt_coord[:,:,4],axis=2),
+                    tf.expand_dims(gt_coord[:,:,14],axis=2),
+                    tf.expand_dims(gt_coord[:,:,10],axis=2)
+                    ],axis=2)
+                landmark_loss = landmark_loss+l1loss(pts,lm_coord)
+
+                y = tf.expand_dims(lm_coord[:,1,:]/tf.to_float(H),axis=2)
+                x = tf.expand_dims(lm_coord[:,0,:]/tf.to_float(W),axis=2)
+                img_lm = tf.image.draw_bounding_boxes(
+                    data_dict['image'],
+                    tf.concat([y,x,y+0.01,x+0.01],axis=2)
+                )
+                tf.summary.image('plotlm' , \
+                                img_lm)
+                if FLAGS.with_geo:
+                    templatepoints = tf.expand_dims(tf.transpose(tf.stack([tf.constant([297.238,223.481]),
+                                            tf.constant([492.818,212.4311]),
+                                            tf.constant([498.895,370.994]),
+                                            tf.constant([304.972,382.044])])),axis=0)
+                    templatepoints = tf.tile(templatepoints,[FLAGS.batch_size,1,1])
+                    H_pred,H_flat = utlr.solve_DLT(lm_coord,templatepoints)
+
+                    warped_points = DH_transform(H_pred,lm_coord)
+                    landmark_loss = landmark_loss+l1loss(warped_points,templatepoints)*5.0
+                    tf.summary.scalar('losses/H_loss', l1loss(warped_points,templatepoints))
+
+            elif FLAGS.with_coordconv:
+                lm_coord = tf.reshape(output[1],[-1,2,28])
+
+                B,H,W,D = landmark.get_shape().as_list()
+
+                gt_coord = data_dict['pixel_coords']
+                gt_coord.set_shape([FLAGS.batch_size,2,D])                
+                lm_coord = tf.concat([tf.expand_dims((lm_coord[:,0,:]+1)/2.0*tf.to_float(W),axis=1),
+                                    tf.expand_dims((lm_coord[:,1,:]+1)/2.0*tf.to_float(H),axis=1)],axis=1)	
 
 
-    #Geometric loss
+                #gt_coord = tf.reverse(argmax_2d(landmark),[1])
+                landmark_loss = landmark_loss+l1loss(gt_coord,lm_coord)#*landmark_weight
+
+                
+
+
+
+
     # if FLAGS.with_geo:
     #     geo_loss,gt_landmarkdist = geometric_loss(pred_landmark,landmark,depth,visibility,data_dict["matK"])
 
@@ -219,7 +276,7 @@ def compute_loss(output,data_dict,FLAGS):
 
     total_loss = depth_loss+landmark_loss+vis_loss+geo_loss+dist_loss
 
-    return total_loss,depth_loss,landmark_loss,vis_loss,geo_loss,gt_coord,lm_coord
+    return total_loss#,depth_loss,landmark_loss,vis_loss,geo_loss
 
 
 
