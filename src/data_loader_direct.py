@@ -167,7 +167,7 @@ class DataLoader(object):
 
             # The map transformation takes a function and applies it to every element
             # of the dataset.
-            dataset = dataset.map(decode)
+            dataset = dataset.map(decode,num_parallel_calls=8)
             #dataset = dataset.map(augment2)
             # dataset = dataset.map(normalize)
 
@@ -181,8 +181,8 @@ class DataLoader(object):
             #if with_aug is not None:
             #dataset = dataset.map(augment)
 
-            iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+            #iterator = dataset.make_one_shot_iterator()
+        return dataset#iterator.get_next()
 
 
     #==================================
@@ -549,7 +549,7 @@ class DataLoader(object):
 
         def random_rotate(data_dict):
             #import pdb;pdb.set_trace()
-            angle = tf.random_uniform([1], -np.pi, np.pi, dtype=tf.float32)[0]
+            angle = tf.random_uniform([1], -np.pi/5.0, np.pi/5.0, dtype=tf.float32)[0]
             data_dict['IR'] = tf.contrib.image.rotate(data_dict['IR'],angle)
             data_dict['image'] = tf.contrib.image.rotate(data_dict['image'],angle)
             data_dict['points2D'] = tf.contrib.image.rotate(data_dict['points2D'],angle)
@@ -573,6 +573,7 @@ class DataLoader(object):
             data_dict['image'] = tf.image.resize_images(data_dict['image'], [out_h, out_w])
             data_dict['points2D'] = tf.image.resize_images(data_dict['points2D'], [out_h, out_w])
             return data_dict
+
 
 
         # Random cropping
@@ -600,10 +601,40 @@ class DataLoader(object):
             data_dict['points2D'] = tf.image.crop_to_bounding_box(
                 data_dict['points2D'], offset_y, offset_x, out_h, out_w)
             return data_dict
+
+
+        def random_color(image):
+
+            color_ordering = tf.random_uniform([1], 0, 4,dtype=tf.int32)
+            
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.zeros([],tf.int32)),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*2),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_hue(image, max_delta=0.2),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_saturation(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_contrast(image, lower=0.5, upper=1.5),lambda:image)
+            image = tf.cond(tf.equal(color_ordering[0],tf.ones([],tf.int32)*3),lambda:tf.image.random_brightness(image, max_delta=32. / 255.),lambda:image) 
+
+            return image
+
+
                 
         data_dict=random_rotate(data_dict)
         data_dict=random_scaling(data_dict)
         data_dict=random_cropping(data_dict)
+        #data_dict['IR'] = random_color(data_dict['IR'])
 
         return data_dict
 
